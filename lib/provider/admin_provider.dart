@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../models/company_model.dart';
 import '../models/report_models.dart';
+import '../models/task_model.dart';
 import '../services/api_client.dart';
 
 class AdminProvider extends ChangeNotifier {
@@ -11,6 +13,12 @@ class AdminProvider extends ChangeNotifier {
   ReportOverview? _overview;
   List<UserPerformance> _userPerformance = [];
   List<CompanySummary> _companySummary = [];
+  List<Task> _progressTasks = [];
+
+  // Filter State
+  String _datePreset = 'all';
+  DateTimeRange? _customRange;
+  int? _selectedUserId;
 
   bool _isLoading = false;
   String? _error;
@@ -20,6 +28,11 @@ class AdminProvider extends ChangeNotifier {
   ReportOverview? get overview => _overview;
   List<UserPerformance> get userPerformance => _userPerformance;
   List<CompanySummary> get companySummary => _companySummary;
+  List<Task> get progressTasks => _progressTasks;
+  
+  String get datePreset => _datePreset;
+  DateTimeRange? get customRange => _customRange;
+  int? get selectedUserId => _selectedUserId;
   bool get isLoading => _isLoading;
   String? get error => _error;
 
@@ -93,6 +106,15 @@ class AdminProvider extends ChangeNotifier {
     }
   }
 
+  Future<String> uploadProfileImage(File file) async {
+    try {
+      final res = await _api.multipartPost('/api/upload', file: file, fieldName: 'image');
+      return res['url'];
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   // Company Management
   Future<void> fetchCompanies() async {
     try {
@@ -161,5 +183,63 @@ class AdminProvider extends ChangeNotifier {
     } catch (e) {
       rethrow;
     }
+  }
+
+  Future<void> fetchProgressTasks() async {
+    try {
+      final res = await _api.get('/api/progress');
+      final List<dynamic> items = res['items'] ?? [];
+      _progressTasks = items.map((i) => Task.fromJson(i)).toList();
+      notifyListeners();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  void setFilters({String? datePreset, DateTimeRange? customRange, int? selectedUserId}) {
+    if (datePreset != null) _datePreset = datePreset;
+    _customRange = customRange; // Allow null to clear
+    _selectedUserId = selectedUserId;
+    notifyListeners();
+  }
+
+  List<Task> get filteredProgressTasks {
+    DateTime? start;
+    DateTime? end = DateTime.now().add(const Duration(days: 1)); // Buffer to include current day
+
+    if (_datePreset == 'today') {
+      start = DateTime(end.year, end.month, end.day - 1);
+    } else if (_datePreset == 'week') {
+      final now = DateTime.now();
+      start = now.subtract(Duration(days: now.weekday - 1));
+      start = DateTime(start.year, start.month, start.day);
+    } else if (_datePreset == 'month') {
+      final now = DateTime.now();
+      start = DateTime(now.year, now.month, 1);
+    } else if (_datePreset == '7d') {
+      start = DateTime.now().subtract(const Duration(days: 7));
+    } else if (_datePreset == '30d') {
+      start = DateTime.now().subtract(const Duration(days: 30));
+    } else if (_datePreset == '90d') {
+      start = DateTime.now().subtract(const Duration(days: 90));
+    } else if (_datePreset == 'custom' && _customRange != null) {
+      start = _customRange!.start;
+      end = _customRange!.end.add(const Duration(days: 1));
+    }
+
+    return _progressTasks.where((t) {
+      final date = t.dueDate ?? t.updatedAt;
+      bool inDateRange = true;
+      if (start != null) {
+        inDateRange = date.isAfter(start!) && date.isBefore(end!);
+      }
+      
+      bool matchesUser = true;
+      if (_selectedUserId != null) {
+        matchesUser = t.assignees.any((u) => u.id == _selectedUserId);
+      }
+      
+      return inDateRange && matchesUser;
+    }).toList();
   }
 }

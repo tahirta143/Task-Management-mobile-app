@@ -3,6 +3,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../provider/task_provider.dart';
 
+import '../../widgets/custom_loader.dart';
 import 'chat_detail_screen.dart';
 
 class ChatScreen extends StatelessWidget {
@@ -13,102 +14,153 @@ class ChatScreen extends StatelessWidget {
     final th = Theme.of(context);
     final isDark = th.brightness == Brightness.dark;
 
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.0, end: 1.0),
-            duration: const Duration(milliseconds: 300),
-            builder: (context, value, child) {
-              return Opacity(
-                opacity: value,
-                child: Transform.translate(offset: Offset(0, 10 * (1 - value)), child: child),
-              );
-            },
-            child: const Text('Collaboration', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.grey)),
-          ),
-          const SizedBox(height: 4),
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.0, end: 1.0),
-            duration: const Duration(milliseconds: 400),
-            builder: (context, value, child) {
-              return Opacity(
-                opacity: value,
-                child: Transform.translate(offset: Offset(0, 10 * (1 - value)), child: child),
-              );
-            },
-            child: const Text('Task Chat', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
-          ),
-          const SizedBox(height: 24),
-          
-          Expanded(
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0.0, end: 1.0),
-              duration: const Duration(milliseconds: 500),
-              builder: (context, value, child) {
-                return Opacity(
-                  opacity: value,
-                  child: Transform.translate(offset: Offset(0, 20 * (1 - value)), child: child),
-                );
-              },
-              child: _buildChatLayout(context, isDark, th),
-            )
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChatLayout(BuildContext context, bool isDark, ThemeData th) {
     final tp = Provider.of<TaskProvider>(context);
     final tasks = tp.tasks;
 
+    return RefreshIndicator(
+      onRefresh: () => tp.fetchTasks(),
+      child: tp.isLoading
+          ? LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: ConstrainedBox(
+                    constraints:
+                        BoxConstraints(minHeight: constraints.maxHeight),
+                    child: const Center(
+                      child: CustomLoader(),
+                    ),
+                  ),
+                );
+              },
+            )
+          : SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0.0, end: 1.0),
+                      duration: const Duration(milliseconds: 300),
+                      builder: (context, value, child) {
+                        return Opacity(
+                          opacity: value,
+                          child: Transform.translate(
+                              offset: Offset(0, 10 * (1 - value)),
+                              child: child),
+                        );
+                      },
+                      child: const Text('Collaboration',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey)),
+                    ),
+                    const SizedBox(height: 4),
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0.0, end: 1.0),
+                      duration: const Duration(milliseconds: 400),
+                      builder: (context, value, child) {
+                        return Opacity(
+                          opacity: value,
+                          child: Transform.translate(
+                              offset: Offset(0, 10 * (1 - value)),
+                              child: child),
+                        );
+                      },
+                      child: const Text('Task Chat',
+                          style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: -0.5)),
+                    ),
+                    const SizedBox(height: 24),
+                    _buildChatLayout(context, isDark, th, tp, tasks),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+
+  Widget _buildChatLayout(BuildContext context, bool isDark, ThemeData th,
+      TaskProvider tp, List tasks) {
     return Container(
+      constraints: BoxConstraints(
+          minHeight: MediaQuery.of(context).size.height * 0.6),
       decoration: BoxDecoration(
         color: isDark ? Colors.white.withAlpha(13) : Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: isDark ? Colors.white.withAlpha(25) : Colors.black.withAlpha(13)),
-        boxShadow: isDark ? null : [BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 10, offset: const Offset(0, 4))],
+        border: Border.all(
+            color: isDark
+                ? Colors.white.withAlpha(25)
+                : Colors.black.withAlpha(13)),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                    color: Colors.black.withAlpha(8),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4))
+              ],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Tasks', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                Text(tasks.length.toString(), style: TextStyle(fontSize: 12, color: th.colorScheme.primary, fontWeight: FontWeight.bold)),
+                const Text('Tasks',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(tasks.length.toString(),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: th.colorScheme.primary,
+                        fontWeight: FontWeight.bold)),
               ],
             ),
           ),
           if (tp.isLoading)
-            const Expanded(child: Center(child: CircularProgressIndicator()))
+            const Padding(
+              padding: EdgeInsets.all(64.0),
+              child: CustomLoader(),
+            )
           else if (tasks.isEmpty)
-            const Expanded(child: Center(child: Text('No active tasks to chat in.', style: TextStyle(color: Colors.grey))))
-          else
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                itemCount: tasks.length,
-                itemBuilder: (context, index) {
-                  final t = tasks[index];
-                  return _buildChatTile(
-                    context, th, isDark, 
-                    taskId: t.id,
-                    title: t.title, 
-                    subtitle: '${t.status.replaceAll('_', ' ')} • ${t.priority.toUpperCase()}',
-                    lastMessage: 'Tap to open chat room', // In real app, fetch last message
-                    time: '', 
-                    unread: 0,
-                    isSelected: false,
-                    delay: index * 50,
-                  );
-                },
+            const Padding(
+              padding: EdgeInsets.all(64.0),
+              child: Center(
+                child: Text('No active tasks to chat in.',
+                    style: TextStyle(color: Colors.grey)),
               ),
             )
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              itemCount: tasks.length,
+              itemBuilder: (context, index) {
+                final t = tasks[index];
+                return _buildChatTile(
+                  context,
+                  th,
+                  isDark,
+                  taskId: t.id,
+                  title: t.title,
+                  subtitle:
+                      '${t.status.replaceAll('_', ' ')} • ${t.priority.toUpperCase()}',
+                  lastMessage: 'Tap to open chat room',
+                  time: '',
+                  unread: 0,
+                  isSelected: false,
+                  delay: index * 50,
+                );
+              },
+            ),
         ],
       ),
     );

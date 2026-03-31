@@ -41,6 +41,8 @@ class Task {
   final List<User> assignees;
   final List<TaskPoint> points;
   final DateTime updatedAt;
+  final int unreadCount;
+  final int? _progressPercent;
 
   Task({
     required this.id,
@@ -55,7 +57,9 @@ class Task {
     this.assignees = const [],
     this.points = const [],
     required this.updatedAt,
-  });
+    this.unreadCount = 0,
+    int? progressPercent,
+  }) : _progressPercent = progressPercent;
 
   factory Task.fromJson(Map<String, dynamic> json) {
     return Task(
@@ -64,13 +68,15 @@ class Task {
       description: json['description'],
       status: json['status'] ?? 'pending',
       priority: json['priority'] ?? 'medium',
-      startDate: json['startDate'] != null ? DateTime.parse(json['startDate']) : null,
-      dueDate: json['dueDate'] != null ? DateTime.parse(json['dueDate']) : null,
+      startDate: json['startDate'] != null ? DateTime.parse(json['startDate'] as String) : null,
+      dueDate: json['dueDate'] != null ? DateTime.parse(json['dueDate'] as String) : null,
       companyId: json['companyId'],
       creatorId: json['creatorId'],
       assignees: (json['assignees'] as List?)?.map((u) => User.fromJson(u)).toList() ?? [],
       points: (json['points'] as List?)?.map((p) => TaskPoint.fromJson(p)).toList() ?? [],
-      updatedAt: DateTime.parse(json['updatedAt'] ?? DateTime.now().toIso8601String()),
+      updatedAt: DateTime.parse((json['updatedAt'] ?? DateTime.now().toIso8601String()) as String),
+      unreadCount: json['unreadCount'] ?? 0,
+      progressPercent: json['progressPercent'],
     );
   }
 
@@ -89,5 +95,18 @@ class Task {
       'points': points.map((p) => p.toJson()).toList(),
       'updatedAt': updatedAt.toIso8601String(),
     };
+  }
+
+  bool get isOverdue {
+    if (status == 'completed') return false;
+    if (dueDate == null) return false;
+    return dueDate!.isBefore(DateTime.now());
+  }
+
+  int get progressPercent {
+    if (_progressPercent != null) return _progressPercent!;
+    if (points.isEmpty) return status == 'completed' ? 100 : 0;
+    final completed = points.where((p) => p.isDone).length;
+    return ((completed / points.length) * 100).toInt();
   }
 }

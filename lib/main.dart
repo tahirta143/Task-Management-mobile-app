@@ -8,6 +8,7 @@ import 'provider/theme_provider.dart';
 import 'provider/task_provider.dart';
 import 'provider/admin_provider.dart';
 import 'provider/chat_provider.dart';
+import 'services/socket_service.dart';
 import 'screens/splash_screen.dart';
 
 void main() async {
@@ -35,6 +36,7 @@ class TaskManagerApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => TaskProvider()),
         ChangeNotifierProvider(create: (_) => AdminProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
+        Provider(create: (_) => SocketService()),
       ],
 
       child: Consumer<ThemeProvider>(

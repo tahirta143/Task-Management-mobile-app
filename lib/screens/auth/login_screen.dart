@@ -5,6 +5,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../provider/auth_provider.dart';
 import '../main_app_scaffold.dart';
 
+import '../../../widgets/custom_loader.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -17,6 +20,15 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passController = TextEditingController();
   bool _showPassword = false;
   final _formKey = GlobalKey<FormState>();
+  bool _isScreenLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(milliseconds: 1000), () {
+      if (mounted) setState(() => _isScreenLoading = false);
+    });
+  }
 
   @override
   void dispose() {
@@ -54,6 +66,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isScreenLoading) {
+      return const Scaffold(body: CustomLoader(fullScreen: true));
+    }
+
     final authState = context.watch<AuthProvider>();
     final th = Theme.of(context);
     final isDark = th.brightness == Brightness.dark;
@@ -223,7 +239,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
               child: authState.isLoading
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                  ? LoadingAnimationWidget.inkDrop(color: Colors.black, size: 24)
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [

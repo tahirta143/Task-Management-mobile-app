@@ -1,13 +1,17 @@
+import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../models/report_models.dart';
 import '../../provider/auth_provider.dart';
 import '../../provider/admin_provider.dart';
 import '../../provider/task_provider.dart';
+import '../../services/socket_service.dart';
+import '../../widgets/custom_loader.dart';
 
 class DashboardScreen extends StatefulWidget {
   final VoidCallback onNavigateToBoard;
@@ -21,6 +25,71 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   File? _imageFile;
   final ImagePicker _picker = ImagePicker();
+  
+  String? _weatherTemp;
+  IconData _weatherIcon = LucideIcons.sun;
+  Color _weatherColor = Colors.amber;
+
+  bool _isUploading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchWeather();
+  }
+
+  Future<void> _fetchWeather() async {
+    try {
+      // 1. Get Geo Location from IP
+      final geoRes = await http.get(Uri.parse('https://get.geojs.io/v1/ip/geo.json'));
+      if (geoRes.statusCode != 200) return;
+      final geoData = json.decode(geoRes.body);
+      final lat = geoData['latitude'];
+      final lon = geoData['longitude'];
+
+      // 2. Get Weather from Open-Meteo
+      final weatherRes = await http.get(Uri.parse(
+          'https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current_weather=true'));
+      if (weatherRes.statusCode != 200) return;
+      final weatherData = json.decode(weatherRes.body);
+
+      if (mounted && weatherData['current_weather'] != null) {
+        final double temp = weatherData['current_weather']['temperature'];
+        final int code = weatherData['current_weather']['weathercode'];
+
+        IconData icon = LucideIcons.sun;
+        Color color = Colors.amber;
+
+        if (code >= 1 && code <= 3) {
+          icon = LucideIcons.cloud;
+          color = Colors.blueGrey;
+        } else if (code >= 45 && code <= 48) {
+          icon = LucideIcons.wind;
+          color = Colors.blueGrey;
+        } else if (code >= 51 && code <= 67) {
+          icon = LucideIcons.cloudRain;
+          color = Colors.blue;
+        } else if (code >= 71 && code <= 77) {
+          icon = LucideIcons.snowflake;
+          color = Colors.cyan;
+        } else if (code >= 80 && code <= 82) {
+          icon = LucideIcons.cloudDrizzle;
+          color = Colors.lightBlue;
+        } else if (code >= 95 && code <= 99) {
+          icon = LucideIcons.cloudLightning;
+          color = Colors.deepPurple;
+        }
+
+        setState(() {
+          _weatherTemp = '${temp.round()}°C';
+          _weatherIcon = icon;
+          _weatherColor = color;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching weather: $e');
+    }
+  }
 
   Future<void> _pickImage() async {
     try {
@@ -33,7 +102,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (pickedFile != null) {
         setState(() {
           _imageFile = File(pickedFile.path);
+          _isUploading = true;
         });
+
+        // Auto-upload to server
+        try {
+          final auth = context.read<AuthProvider>();
+          await auth.updateProfileImage(_imageFile!);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Profile image updated successfully'), backgroundColor: Colors.green),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          if (mounted) {
+            setState(() {
+              _isUploading = false;
+            });
+          }
+        }
       }
     } catch (e) {
       debugPrint('Error picking image: $e');
@@ -51,32 +144,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final user = auth.user;
     final isAdmin = user?['role'] == 'admin';
-
-    // If loading reports (for admin) or tasks (for all)
     final isLoading = (isAdmin && admin.isLoading) || tp.isLoading;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildAnimatedBlock(0, _buildHeader(th)),
-          const SizedBox(height: 24),
-          _buildAnimatedBlock(100, _buildProfileCard(isDark, th, user, isAdmin)),
-          const SizedBox(height: 16),
-          if (isLoading)
-            const Center(child: Padding(padding: EdgeInsets.all(32.0), child: CircularProgressIndicator()))
-          else ...[
-            _buildAnimatedBlock(200, _buildMiniStatsGrid(th, isDark, admin, tp, isAdmin)),
-            const SizedBox(height: 16),
-            _buildAnimatedBlock(600, _buildTaskProgressList(th, isDark, tp.tasks)),
-            const SizedBox(height: 16),
-            _buildAnimatedBlock(700, _buildMockHeatmap(th, isDark, admin.overview?.completionTrend)), 
-            const SizedBox(height: 16),
-            _buildAnimatedBlock(800, _buildRecentTasks(th, isDark, tp.tasks)),
-          ],
-          const SizedBox(height: 32),
-        ],
+    return Container(
+      color: Colors.transparent,
+      child: RefreshIndicator(
+        onRefresh: () async {
+          await tp.fetchTasks();
+          if (isAdmin) await admin.fetchDashboardReport();
+        },
+        child: isLoading
+            ? LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: ConstrainedBox(
+                      constraints:
+                          BoxConstraints(minHeight: constraints.maxHeight),
+                      child: const Center(
+                        child: CustomLoader(),
+                      ),
+                    ),
+                  );
+                },
+              )
+            : SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildAnimatedBlock(0, _buildHeader(th)),
+                    const SizedBox(height: 24),
+                    _buildAnimatedBlock(100, _buildProfileCard(isDark, th, user, isAdmin)),
+                    const SizedBox(height: 16),
+                    _buildAnimatedBlock(200, _buildMiniStatsGrid(th, isDark, admin, tp, isAdmin)),
+                    const SizedBox(height: 16),
+                    _buildAnimatedBlock(600, _buildTaskProgressList(th, isDark, tp.tasks)),
+                    const SizedBox(height: 16),
+                    _buildAnimatedBlock(700, _buildWorkActivityHeatmap(th, isDark, admin.overview?.completionTrend)),
+                    const SizedBox(height: 16),
+                    _buildAnimatedBlock(800, _buildRecentTasks(th, isDark, tp.tasks)),
+                    const SizedBox(height: 32),
+                  ],
+                ),
+              ),
       ),
     );
   }
@@ -99,6 +211,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildHeader(ThemeData th) {
+    final now = DateTime.now();
+    final dateStr = DateFormat('EEEE, MMM dd').format(now);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -109,13 +224,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const SizedBox(height: 4),
         Row(
           children: [
-            Text('Monday, Mar 30', style: TextStyle(fontSize: 14, color: th.textTheme.bodySmall?.color)),
+            Text(dateStr, style: TextStyle(fontSize: 14, color: th.textTheme.bodySmall?.color)),
             const SizedBox(width: 8),
             const Text('•', style: TextStyle(color: Colors.grey)),
             const SizedBox(width: 8),
-            const Icon(Icons.wb_sunny, size: 16, color: Colors.amber),
+            Icon(_weatherIcon, size: 16, color: _weatherColor),
             const SizedBox(width: 4),
-            const Text('24°C', style: TextStyle(fontSize: 14, color: Colors.amber, fontWeight: FontWeight.bold))
+            Text(_weatherTemp ?? '--°C', style: TextStyle(fontSize: 14, color: _weatherColor, fontWeight: FontWeight.bold))
           ],
         )
       ],
@@ -123,6 +238,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildProfileCard(bool isDark, ThemeData th, Map<String, dynamic>? user, bool isAdmin) {
+    final String? profileUrl = user?['profileImageUrl'];
+    final String fullUrl = profileUrl == null ? '' : (profileUrl.startsWith('http') ? profileUrl : '${context.read<SocketService>().baseUrl}${profileUrl.startsWith('/') ? '' : '/'}$profileUrl');
+
     return Container(
       decoration: BoxDecoration(
         color: isDark ? Colors.white.withAlpha(13) : Colors.white,
@@ -131,93 +249,99 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       child: Column(
         children: [
-          GestureDetector(
-            onTap: _pickImage,
-            child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-              child: Stack(
-                children: [
-                  Container(
-                    height: 180,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.black26 : Colors.white,
-                      image: _imageFile != null
-                          ? DecorationImage(
-                              image: FileImage(_imageFile!),
-                              fit: BoxFit.cover,
-                              colorFilter: ColorFilter.mode(
-                                Colors.white.withOpacity(0.9),
-                                BlendMode.multiply,
-                              ),
-                            )
-                          : (user?['profileImageUrl'] != null
-                              ? DecorationImage(
-                                  image: NetworkImage(user!['profileImageUrl']),
-                                  fit: BoxFit.cover,
-                                )
-                              : null),
-                    ),
-                    child: (_imageFile == null && user?['profileImageUrl'] == null)
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Container(
-                                  width: 80,
-                                  height: 80,
-                                  decoration: BoxDecoration(
-                                    color: (isDark ? Colors.white : Colors.black).withAlpha(20),
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                Icon(LucideIcons.camera, size: 24, color: Colors.grey.withAlpha(128)),
-                                const SizedBox(height: 4),
-                                const Text('Tap to set banner', style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          )
-                        : null,
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // Banner Area
+              Container(
+                height: 120,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                  gradient: LinearGradient(
+                    colors: isDark 
+                      ? [Colors.blueGrey.withAlpha(40), Colors.black26] 
+                      : [th.colorScheme.primary.withAlpha(40), th.colorScheme.primary.withAlpha(10)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withAlpha(10),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (_imageFile != null || user?['profileImageUrl'] != null)
-                    Positioned(
-                      right: 16,
-                      top: 16,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(color: Colors.black.withAlpha(100), shape: BoxShape.circle),
-                        child: const Icon(LucideIcons.camera, color: Colors.white, size: 16),
-                      ),
-                    ),
-                ],
+                ),
               ),
-            ),
+              // DP Avatar
+              Positioned(
+                bottom: -40,
+                left: 24,
+                child: GestureDetector(
+                  onTap: _pickImage,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1A1D21) : Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [BoxShadow(color: Colors.black.withAlpha(30), blurRadius: 15, offset: const Offset(0, 8))],
+                    ),
+                    child: CircleAvatar(
+                      radius: 46,
+                      backgroundColor: isDark ? Colors.white10 : Colors.black.withAlpha(5),
+                      backgroundImage: _imageFile != null 
+                        ? FileImage(_imageFile!) as ImageProvider
+                        : (profileUrl != null ? NetworkImage(fullUrl) : null),
+                      child: (_imageFile == null && profileUrl == null)
+                        ? Icon(LucideIcons.user, size: 40, color: Colors.grey.withAlpha(100))
+                        : null,
+                    ),
+                  ),
+                ),
+              ),
+              // Camera Icon Overlay for DP
+              Positioned(
+                bottom: -40,
+                left: 24 + 68,
+                child: GestureDetector(
+                  onTap: _pickImage,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: th.colorScheme.primary,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: isDark ? const Color(0xFF1A1D21) : Colors.white, width: 2),
+                    ),
+                    child: const Icon(LucideIcons.camera, size: 12, color: Colors.black),
+                  ),
+                ),
+              ),
+              if (_isUploading)
+                Positioned(
+                  bottom: -40,
+                  left: 24,
+                  child: IgnorePointer(
+                    child: Container(
+                      width: 100, // Roughly matching avatar + padding
+                      height: 100,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withAlpha(50),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Center(
+                        child: CustomLoader(size: 20, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
+          const SizedBox(height: 50),
           Padding(
-            padding: const EdgeInsets.all(20.0),
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(user?['username'] ?? 'Current User', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
-                    Text(isAdmin ? 'Administrator' : 'Team Member', style: TextStyle(fontSize: 12, color: th.textTheme.bodySmall?.color, fontWeight: FontWeight.w500)),
+                    Text(user?['username'] ?? 'Current User', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
+                    const SizedBox(height: 2),
+                    Text(isAdmin ? 'Administrator' : 'Team Member', style: TextStyle(fontSize: 13, color: th.textTheme.bodySmall?.color, fontWeight: FontWeight.w500)),
                   ],
                 ),
                 Container(
@@ -226,7 +350,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     color: th.colorScheme.primary.withAlpha(30),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(LucideIcons.activity, color: th.colorScheme.primary, size: 18),
+                  child: Icon(LucideIcons.activity, color: th.colorScheme.primary, size: 20),
                 )
               ],
             ),
@@ -501,26 +625,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildMockHeatmap(ThemeData th, bool isDark, List<CompletionTrendItem>? trend) {
-    // Generate last 49 days of intensity
+  Widget _buildWorkActivityHeatmap(ThemeData th, bool isDark, List<CompletionTrendItem>? trend) {
+    // We'll show 15 weeks = 105 days
     final Map<String, int> dailyActivity = {};
     if (trend != null) {
       for (var item in trend) {
-        // day is usually YYYY-MM-DD
         final dayStr = item.day.split('T')[0];
         dailyActivity[dayStr] = item.completed;
       }
     }
 
-    final List<int> intensities = List.generate(49, (index) {
-      final date = DateTime.now().subtract(Duration(days: 48 - index));
-      final dateStr = date.toIso8601String().split('T')[0];
-      final count = dailyActivity[dateStr] ?? 0;
-      if (count == 0) return 0;
-      if (count < 3) return 1;
-      if (count < 6) return 2;
-      return 3;
-    });
+    final today = DateTime.now();
+    // Adjust to end of current week (Saturday)
+    final endDate = today.add(Duration(days: 6 - today.weekday)); 
+    final startDate = endDate.subtract(const Duration(days: 104)); // 15 weeks total
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -538,33 +656,89 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.black12, borderRadius: BorderRadius.circular(12)),
-                child: const Text('Last 49 Days', style: TextStyle(fontSize: 10, fontFamily: 'monospace')),
+                child: const Text('Last 15 Weeks', style: TextStyle(fontSize: 10, fontFamily: 'monospace')),
               )
             ],
           ),
-          const SizedBox(height: 16),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 7,
-              crossAxisSpacing: 4,
-              mainAxisSpacing: 4,
-            ),
-            itemCount: 49,
-            itemBuilder: (context, index) {
-              int intensity = intensities[index];
-              Color color;
-              if (intensity == 0) color = isDark ? Colors.white.withAlpha(15) : Colors.black.withAlpha(10);
-              else if (intensity == 1) color = th.colorScheme.primary.withAlpha(60);
-              else if (intensity == 2) color = th.colorScheme.primary.withAlpha(160);
-              else color = th.colorScheme.primary;
+          const SizedBox(height: 20),
+          
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            reverse: true, // Show most recent on the right
+            child: Row(
+              children: List.generate(15, (weekIdx) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6.0),
+                  child: Column(
+                    children: List.generate(7, (dayIdx) {
+                      final dayInTotal = (weekIdx * 7) + dayIdx;
+                      final date = startDate.add(Duration(days: dayInTotal));
+                      final dateStr = DateFormat('yyyy-MM-dd').format(date);
+                      final count = dailyActivity[dateStr] ?? 0;
+                      
+                      Color color;
+                      if (count == 0) color = isDark ? Colors.white.withAlpha(15) : Colors.black.withAlpha(10);
+                      else if (count < 2) color = th.colorScheme.primary.withAlpha(60);
+                      else if (count < 4) color = th.colorScheme.primary.withAlpha(140);
+                      else if (count < 7) color = th.colorScheme.primary.withAlpha(200);
+                      else color = th.colorScheme.primary;
 
-              return Container(decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(6)));
-            },
+                      return GestureDetector(
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('${DateFormat('MMM dd').format(date)}: $count tasks completed'),
+                              duration: const Duration(seconds: 1),
+                              behavior: SnackBarBehavior.floating,
+                              margin: const EdgeInsets.all(20),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              backgroundColor: th.colorScheme.primary,
+                            ),
+                          );
+                        },
+                        child: Container(
+                          width: 14,
+                          height: 14,
+                          margin: const EdgeInsets.only(bottom: 4),
+                          decoration: BoxDecoration(
+                            color: color,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                );
+              }),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Legend
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              const Text('Less', style: TextStyle(fontSize: 9, color: Colors.grey)),
+              const SizedBox(width: 4),
+              _buildLegendBox(isDark ? Colors.white.withAlpha(15) : Colors.black.withAlpha(5)),
+              _buildLegendBox(th.colorScheme.primary.withAlpha(60)),
+              _buildLegendBox(th.colorScheme.primary.withAlpha(140)),
+              _buildLegendBox(th.colorScheme.primary.withAlpha(200)),
+              _buildLegendBox(th.colorScheme.primary),
+              const SizedBox(width: 4),
+              const Text('More', style: TextStyle(fontSize: 9, color: Colors.grey)),
+            ],
           )
         ],
       ),
+    );
+  }
+
+  Widget _buildLegendBox(Color color) {
+    return Container(
+      width: 10,
+      height: 10,
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
     );
   }
 
@@ -643,21 +817,4 @@ class _DashboardScreenState extends State<DashboardScreen> {
     padding: const EdgeInsets.symmetric(vertical: 4.0),
     child: Divider(color: Colors.grey.withAlpha(30)),
   );
-}
-
-class _StatusIndicator extends StatelessWidget {
-  final Color color;
-  final String label;
-  const _StatusIndicator({required this.color, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-        const SizedBox(width: 6),
-        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
-      ],
-    );
-  }
 }

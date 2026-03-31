@@ -33,7 +33,7 @@ class Message {
       content: json['content'],
       imageUrl: json['imageUrl'],
       replyInfo: json['replyInfo'],
-      createdAt: DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
+      createdAt: DateTime.parse((json['createdAt'] ?? DateTime.now().toIso8601String()) as String),
     );
   }
 

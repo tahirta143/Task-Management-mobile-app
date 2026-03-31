@@ -1,7 +1,10 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:flutter/cupertino.dart';
+
 import '../models/task_model.dart';
 import '../models/user_model.dart';
 import '../models/company_model.dart';
+import '../models/message_model.dart';
 import '../services/api_client.dart';
 
 class TaskProvider extends ChangeNotifier {
@@ -48,6 +51,20 @@ class TaskProvider extends ChangeNotifier {
   Future<void> updateTask(int taskId, Map<String, dynamic> patch) async {
     try {
       final response = await _api.patch('/api/tasks/$taskId', body: patch);
+      final updatedTask = Task.fromJson(response['item']);
+      final index = _tasks.indexWhere((t) => t.id == taskId);
+      if (index != -1) {
+        _tasks[index] = updatedTask;
+        notifyListeners();
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> replaceTaskAssignees(int taskId, List<int> assigneeIds) async {
+    try {
+      final response = await _api.put('/api/tasks/$taskId/assignees', body: {'assigneeIds': assigneeIds});
       final updatedTask = Task.fromJson(response['item']);
       final index = _tasks.indexWhere((t) => t.id == taskId);
       if (index != -1) {
@@ -106,6 +123,26 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
+  // Chat/Messages
+  Future<List<Message>> fetchTaskMessages(int taskId) async {
+    try {
+      final response = await _api.get('/api/tasks/$taskId/messages');
+      final List<dynamic> items = response['items'] ?? [];
+      return items.map((m) => Message.fromJson(m)).toList();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<Message> uploadTaskImage(int taskId, File image) async {
+    try {
+      final response = await _api.multipartPost('/api/tasks/$taskId/messages/image', file: image);
+      return Message.fromJson(response['item']);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   // Helpers often used in task creation/editing
   Future<List<User>> fetchUsers() async {
     try {
@@ -126,4 +163,6 @@ class TaskProvider extends ChangeNotifier {
       rethrow;
     }
   }
+
+  void markTaskAsRead(int taskId) {}
 }

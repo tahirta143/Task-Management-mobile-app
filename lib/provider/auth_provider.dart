@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -99,6 +100,54 @@ class AuthProvider extends ChangeNotifier {
     await prefs.remove('tm_user');
     
     notifyListeners();
+  }
+  
+  Future<void> updateProfileImage(File imageFile) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    
+    try {
+      if (_user == null) throw ApiException('User not authenticated');
+
+      // 1. Upload the image
+      final uploadRes = await ApiClient().multipartPost(
+        '/api/uploads/image',
+        file: imageFile,
+        fieldName: 'image'
+      );
+      
+      final url = uploadRes['url'];
+      if (url == null) throw ApiException('Failed to get upload URL');
+
+      // 2. Patch the user's profileImageUrl
+      final patchRes = await ApiClient().patch(
+        '/api/users/${_user!['id']}/profile-image',
+        body: {'profileImageUrl': url}
+      );
+      
+      // 3. Update the local user object with returned data or manually
+      final updatedUser = Map<String, dynamic>.from(_user!);
+      updatedUser['profileImageUrl'] = url;
+      _user = updatedUser;
+      
+      // 4. Save to SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('tm_user', json.encode(_user));
+      
+      _isLoading = false;
+      notifyListeners();
+    } on ApiException catch (e) {
+      _error = e.message;
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Failed to upload profile image';
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
   }
   
   void clearError() {

@@ -12,16 +12,15 @@ import '../../provider/auth_provider.dart';
 import '../../services/socket_service.dart';
 import '../../widgets/custom_loader.dart';
 
-class ChatDetailScreen extends StatefulWidget {
-  final int taskId;
-  final String taskTitle;
-  const ChatDetailScreen({super.key, required this.taskId, required this.taskTitle});
+class TaskDetailScreen extends StatefulWidget {
+  final Task task;
+  const TaskDetailScreen({super.key, required this.task});
 
   @override
-  State<ChatDetailScreen> createState() => _ChatDetailScreenState();
+  State<TaskDetailScreen> createState() => _TaskDetailScreenState();
 }
 
-class _ChatDetailScreenState extends State<ChatDetailScreen> {
+class _TaskDetailScreenState extends State<TaskDetailScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<Message> _messages = [];
@@ -32,10 +31,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadMessages();
-      _initSocket();
-    });
+    _loadMessages();
+    _initSocket();
   }
 
   void _initSocket() async {
@@ -46,22 +43,20 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     await ss.connect();
     if (!mounted) return;
     
-    ss.joinTask(widget.taskId);
+    ss.joinTask(widget.task.id);
 
     ss.socket.on('message:new', (data) {
-      if (data['taskId'] == widget.taskId) {
+      if (data['taskId'] == widget.task.id) {
         final newMsg = Message.fromJson(data);
         if (mounted && !_messages.any((m) => m.id == newMsg.id)) {
           setState(() => _messages.add(newMsg));
           _scrollToBottom();
-          // Mark as read when receiving in-room
-          context.read<TaskProvider>().markTaskAsRead(widget.taskId);
         }
       }
     });
 
     ss.socket.on('typing', (data) {
-      if (data['taskId'] == widget.taskId) {
+      if (data['taskId'] == widget.task.id) {
         final userId = data['userId'];
         if (userId != me?['id']) {
           setState(() => _typingUsers[userId] = data['isTyping']);
@@ -72,10 +67,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
   void _loadMessages() async {
     try {
-      final msgs = await context.read<TaskProvider>().fetchTaskMessages(widget.taskId);
+      final msgs = await context.read<TaskProvider>().fetchTaskMessages(widget.task.id);
       if (mounted) {
         setState(() {
-          _messages.clear();
           _messages.addAll(msgs);
           _isLoadingMessages = false;
         });
@@ -109,7 +103,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     // Optimistic Update
     final optimistic = Message(
       id: 'tmp-${DateTime.now().millisecondsSinceEpoch}',
-      taskId: widget.taskId,
+      taskId: widget.task.id,
       type: 'text',
       content: text,
       senderId: me['id'],
@@ -132,7 +126,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     final replyToId = _replyingTo?.id != null ? int.tryParse(_replyingTo!.id) : null;
     
     final ss = SocketService();
-    ss.sendMessage(widget.taskId, text, replyToId: replyToId, onAck: (ack) {
+    ss.sendMessage(widget.task.id, text, replyToId: replyToId, onAck: (ack) {
       if (mounted) {
         setState(() {
           _messages.removeWhere((m) => m.id == optimistic.id);
@@ -142,7 +136,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     
     _messageController.clear();
     setState(() => _replyingTo = null);
-    ss.stopTyping(widget.taskId);
+    ss.stopTyping(widget.task.id);
   }
 
   void _sendImage() async {
@@ -157,7 +151,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     // Optimistic Update with local file path
     final optimistic = Message(
       id: 'tmp-img-${DateTime.now().millisecondsSinceEpoch}',
-      taskId: widget.taskId,
+      taskId: widget.task.id,
       type: 'image',
       imageUrl: image.path, // Use local path for immediate display
       senderId: me['id'],
@@ -179,9 +173,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     final tp = context.read<TaskProvider>();
     
     try {
-      final msg = await tp.uploadTaskImage(widget.taskId, File(image.path));
+      final msg = await tp.uploadTaskImage(widget.task.id, File(image.path));
       final ss = SocketService();
-      ss.sendImage(widget.taskId, msg.imageUrl!, replyToId: replyToId, onAck: (ack) {
+      ss.sendImage(widget.task.id, msg.imageUrl!, replyToId: replyToId, onAck: (ack) {
         if (mounted) {
           setState(() {
             _replyingTo = null;
@@ -199,11 +193,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     }
   }
 
+
   @override
   void dispose() {
     final ss = SocketService();
-    ss.stopTyping(widget.taskId);
-    ss.leaveTask(widget.taskId);
+    ss.leaveTask(widget.task.id);
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -214,6 +208,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     final th = Theme.of(context);
     final isDark = th.brightness == Brightness.dark;
     final me = context.watch<AuthProvider>().user;
+    final isAdmin = me?['role'] == 'admin';
+    final canChat = widget.task.status != 'pending' || isAdmin;
 
     return Scaffold(
       appBar: AppBar(
@@ -221,8 +217,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Room', style: TextStyle(fontSize: 10, color: Colors.grey)),
-            Text(widget.taskTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(widget.task.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text('#${widget.task.id} • ${widget.task.status.replaceAll('_', ' ').toUpperCase()}', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
           ],
         ),
         actions: [
@@ -234,7 +230,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           // Checklist / Points
           Consumer<TaskProvider>(
             builder: (context, tp, child) {
-              final currentTask = tp.tasks.firstWhere((t) => t.id == widget.taskId, orElse: () => throw 'Task not found');
+              final currentTask = tp.tasks.firstWhere((t) => t.id == widget.task.id, orElse: () => widget.task);
               if (currentTask.points.isEmpty) return const SizedBox.shrink();
 
               return Container(
@@ -269,6 +265,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       child: InkWell(
                         onTap: () async {
                           await tp.togglePoint(currentTask.id, p.id, !p.isDone);
+                          // tp.fetchTasks() would ideally trigger notification, but adding local setState if needed
                         },
                         borderRadius: BorderRadius.circular(12),
                         child: Padding(
@@ -295,7 +292,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               ? const CustomLoader()
               : RefreshIndicator(
                   onRefresh: () async {
+                    final tp = context.read<TaskProvider>();
                     _messages.clear();
+                    await tp.fetchTasks();
                     _loadMessages();
                   },
                   child: ListView.builder(
@@ -324,8 +323,22 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               ),
             ),
 
-          // Input Area
-          _buildInput(th, isDark),
+          // Input
+          if (canChat) 
+            _buildInput(th, isDark)
+          else
+            Container(
+              padding: const EdgeInsets.all(24),
+              width: double.infinity,
+              color: isDark ? Colors.white.withAlpha(5) : Colors.black.withAlpha(5),
+              child: Column(
+                children: [
+                  const Text('🔒', style: TextStyle(fontSize: 24)),
+                  const SizedBox(height: 8),
+                  Text('Chat is disabled until the task is in progress.', style: TextStyle(fontSize: 13, color: Colors.grey[500], fontWeight: FontWeight.w500)),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -439,12 +452,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       ),
       clipBehavior: Clip.antiAlias,
       child: sender?.profileImageUrl != null
-          ? Image.network(
-              sender!.profileImageUrl!.startsWith('http') 
-              ? sender.profileImageUrl! 
-              : '${SocketService().baseUrl}${sender.profileImageUrl}',
-              fit: BoxFit.cover,
-            )
+          ? Image.network(sender!.profileImageUrl!, fit: BoxFit.cover)
           : Center(
               child: Text(
                 (sender?.username ?? 'U').substring(0, 1).toUpperCase(),
@@ -491,8 +499,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   minLines: 1,
                   onChanged: (val) {
                     final ss = SocketService();
-                    if (val.isNotEmpty) ss.startTyping(widget.taskId);
-                    else ss.stopTyping(widget.taskId);
+                    if (val.isNotEmpty) ss.startTyping(widget.task.id);
+                    else ss.stopTyping(widget.task.id);
                   },
                   decoration: InputDecoration(
                     hintText: 'Message...',

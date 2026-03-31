@@ -25,6 +25,8 @@ class MainAppScaffold extends StatefulWidget {
 
 class _MainAppScaffoldState extends State<MainAppScaffold> {
   int _bottomNavIndex = 0;
+  Widget? _adminView;
+  String? _adminTitle;
 
   @override
   void initState() {
@@ -52,6 +54,8 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
   void _onBottomNavTapped(int index) {
     setState(() {
       _bottomNavIndex = index;
+      _adminView = null;
+      _adminTitle = null;
     });
   }
 
@@ -59,14 +63,19 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
     Navigator.of(context).pop(); // close drawer
     setState(() {
       _bottomNavIndex = index;
+      _adminView = null;
+      _adminTitle = null;
     });
   }
 
-  void _navigateToAdmin(Widget screen) {
+  void _navigateToAdmin(Widget screen, String title) {
     // Close the drawer
     Navigator.of(context).pop();
     // Navigate safely atop the MainAppScaffold
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+    setState(() {
+      _adminView = screen;
+      _adminTitle = title;
+    });
   }
 
   @override
@@ -118,7 +127,7 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
         ],
       ),
       drawer: _buildAdminDrawer(context, isDark, th),
-      body: _screens[_bottomNavIndex],
+      body: _adminView ?? _screens[_bottomNavIndex],
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: th.scaffoldBackgroundColor,
@@ -270,22 +279,22 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                         _NavItem(
                           icon: LucideIcons.users,
                           label: 'Users',
-                          onTap: () => _navigateToAdmin(const AdminUsersScreen()),
+                          onTap: () => _navigateToAdmin(const AdminUsersScreen(), 'Staff Directory'),
                         ),
                         _NavItem(
                           icon: LucideIcons.barChart3,
                           label: 'Reports',
-                          onTap: () => _navigateToAdmin(const AdminReportsScreen()),
+                          onTap: () => _navigateToAdmin(const AdminReportsScreen(), 'Reports & Analytics'),
                         ),
                         _NavItem(
                           icon: LucideIcons.building2,
                           label: 'Companies',
-                          onTap: () => _navigateToAdmin(const AdminCompaniesScreen()),
+                          onTap: () => _navigateToAdmin(const AdminCompaniesScreen(), 'Companies'),
                         ),
                         _NavItem(
                           icon: LucideIcons.checkSquare,
-                          label: 'System Tasks',
-                          onTap: () => _navigateToAdmin(const AdminTasksScreen()),
+                          label: 'Tasks',
+                          onTap: () => _navigateToAdmin(const AdminTasksScreen(), 'Admin Tasks'),
                         ),
                       ],
                     ],

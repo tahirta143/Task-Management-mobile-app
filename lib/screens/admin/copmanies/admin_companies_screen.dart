@@ -5,6 +5,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../../provider/admin_provider.dart';
 import '../../../models/company_model.dart';
+import '../../../widgets/custom_loader.dart';
 
 class AdminCompaniesScreen extends StatefulWidget {
   const AdminCompaniesScreen({super.key});
@@ -15,14 +16,6 @@ class AdminCompaniesScreen extends StatefulWidget {
 
 class _AdminCompaniesScreenState extends State<AdminCompaniesScreen> {
   final _nameController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AdminProvider>().fetchCompanies();
-    });
-  }
 
   @override
   void dispose() {
@@ -143,44 +136,61 @@ class _AdminCompaniesScreenState extends State<AdminCompaniesScreen> {
 
     final ap = Provider.of<AdminProvider>(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: th.scaffoldBackgroundColor,
-        elevation: 0,
-        title: const Text('Admin Companies', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-        centerTitle: false,
-      ),
-      body: ap.isLoading && ap.companies.isEmpty
-        ? const Center(child: CircularProgressIndicator())
-        : SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildAnimatedBlock(0, const Text('Admin', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.grey))),
-            const SizedBox(height: 4),
-            _buildAnimatedBlock(100, Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Companies', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
-                ElevatedButton.icon(
-                  onPressed: _showCreateCompanyPopup,
-                  icon: const Icon(LucideIcons.plus, size: 16),
-                  label: const Text('Create'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: th.colorScheme.primary,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+    return Container(
+      color: Colors.transparent,
+      child: RefreshIndicator(
+        onRefresh: () async {
+          await ap.fetchCompanies();
+        },
+        child: ap.isLoading
+            ? LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: ConstrainedBox(
+                      constraints:
+                          BoxConstraints(minHeight: constraints.maxHeight),
+                      child: const Center(
+                        child: CustomLoader(),
+                      ),
+                    ),
+                  );
+                },
+              )
+            : SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('ADMIN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: th.colorScheme.primary, letterSpacing: 1.5)),
+                          const Text('Companies', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: _showCreateCompanyPopup,
+                        icon: const Icon(LucideIcons.plus, size: 16),
+                        label: const Text('Create'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: th.colorScheme.primary,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        ),
+                      )
+                    ],
                   ),
-                )
-              ],
-            )),
-            const SizedBox(height: 24),
-
-            _buildAnimatedBlock(200, _buildCompaniesGrid(isDark, th, cols, ap.companies)),
-          ],
-        ),
-      ),
+                  const SizedBox(height: 24),
+                  _buildAnimatedBlock(200, _buildCompaniesGrid(isDark, th, cols, ap.companies)),
+                ],
+              ),
+            ),
+          ),
     );
   }
 
