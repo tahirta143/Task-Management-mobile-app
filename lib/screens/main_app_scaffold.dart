@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 import '../provider/theme_provider.dart';
 import '../provider/notification_provider.dart';
@@ -56,7 +57,15 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
 
     // Join the personal user room so the server can push events directly
     // to this user (task:assigned, task:new_message)
-    ss.joinUserRoom();
+    if (ss.socket.connected) {
+      debugPrint('MainAppScaffold: Joining User Room');
+      ss.joinUserRoom();
+    } else {
+      ss.socket.on('connect', (_) {
+        debugPrint('MainAppScaffold: Late Joining User Room');
+        ss.joinUserRoom();
+      });
+    }
 
     // ── Task assignment notifications ──────────────────────────────────────
     ss.listenForTaskAssigned((payload) {

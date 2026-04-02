@@ -12,6 +12,7 @@ import '../../provider/admin_provider.dart';
 import '../../provider/task_provider.dart';
 import '../../services/socket_service.dart';
 import '../../widgets/custom_loader.dart';
+import '../../models/task_model.dart';
 
 class DashboardScreen extends StatefulWidget {
   final VoidCallback onNavigateToBoard;
@@ -182,7 +183,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: 16),
                     _buildAnimatedBlock(600, _buildTaskProgressList(th, isDark, tp.tasks)),
                     const SizedBox(height: 16),
-                    _buildAnimatedBlock(700, _buildWorkActivityHeatmap(th, isDark, admin.overview?.completionTrend)),
+                    _buildAnimatedBlock(700, _buildWorkActivityHeatmap(th, isDark, tp.tasks)),
                     const SizedBox(height: 16),
                     _buildAnimatedBlock(800, _buildRecentTasks(th, isDark, tp.tasks)),
                     const SizedBox(height: 32),
@@ -557,9 +558,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildTaskProgressList(ThemeData th, bool isDark, List<dynamic> tasks) {
-    final displayTasks = tasks.take(3).toList();
-    if (displayTasks.isEmpty) return const SizedBox.shrink();
+  Widget _buildTaskProgressList(ThemeData th, bool isDark, List<Task> tasks) {
+    if (tasks.isEmpty) return const SizedBox.shrink();
+
+    // Sort tasks: completed last, then by progress percent descending
+    final sortedTasks = List<Task>.from(tasks)..sort((a, b) {
+      if (a.status == 'completed' && b.status != 'completed') return 1;
+      if (b.status == 'completed' && a.status != 'completed') return -1;
+      return b.progressPercent.compareTo(a.progressPercent);
+    });
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -574,77 +581,153 @@ class _DashboardScreenState extends State<DashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Task Progress', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const Icon(LucideIcons.trendingUp, color: Colors.grey, size: 18),
+              Text('${tasks.length} tasks', style: const TextStyle(fontSize: 10, color: Colors.grey)),
             ],
           ),
-          const SizedBox(height: 24),
-          ...displayTasks.map((t) {
-            // Calculate a simple progression (mock logic since DB might not have many steps)
-            final pct = t.status == 'completed' ? 100 : (t.status == 'in_progress' ? 50 : 0);
-            return InkWell(
-              onTap: widget.onNavigateToBoard,
-              borderRadius: BorderRadius.circular(16),
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('${t.title}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-                        Text('$pct%', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 6,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.white.withAlpha(20) : Colors.black.withAlpha(10),
-                        borderRadius: BorderRadius.circular(3),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 280, // Fixed height for scrollable area
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: sortedTasks.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 16),
+              itemBuilder: (context, index) {
+                final t = sortedTasks[index];
+                final pct = t.progressPercent;
+                
+                // Color Logic from React
+                Color barColor = th.colorScheme.primary;
+                if (t.status == 'completed') {
+                  barColor = Colors.green;
+                } else if (t.isOverdue) {
+                  barColor = Colors.red;
+                } else if (pct >= 80) {
+                  barColor = Colors.amber;
+                }
+
+                // Priority Color
+                Color priorityColor = Colors.blue;
+                if (t.priority == 'urgent') {
+                  priorityColor = Colors.red;
+                } else if (t.priority == 'high') {
+                  priorityColor = Colors.amber;
+                } else if (t.priority == 'low') {
+                  priorityColor = Colors.green;
+                }
+
+                return InkWell(
+                  onTap: widget.onNavigateToBoard,
+                  borderRadius: BorderRadius.circular(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    t.title,
+                                    style: TextStyle(
+                                      fontSize: 12, 
+                                      fontWeight: FontWeight.bold,
+                                      decoration: t.status == 'completed' ? TextDecoration.lineThrough : null,
+                                      color: t.status == 'completed' ? Colors.grey : null,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: priorityColor.withAlpha(40), // 15% in React is about 40 in alpha
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: priorityColor.withAlpha(80)), // 30% is about 80 in alpha
+                                  ),
+                                  child: Text(
+                                    t.priority.toUpperCase(),
+                                    style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: priorityColor),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text('${t.progressPercent}%', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        ],
                       ),
-                      child: FractionallySizedBox(
-                        alignment: Alignment.centerLeft,
-                        widthFactor: pct / 100,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: t.status == 'completed' ? Colors.green : th.colorScheme.primary,
-                            borderRadius: BorderRadius.circular(3),
+                      const SizedBox(height: 8),
+                      // Progress Bar
+                      Container(
+                        height: 6,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white.withAlpha(20) : Colors.black.withAlpha(10),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: pct / 100,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: barColor,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }).toList(),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '${t.points.where((p) => p.isDone).length} of ${t.points.length} points',
+                            style: const TextStyle(fontSize: 9, color: Colors.grey),
+                          ),
+                          Text(
+                            t.status == 'completed' ? 'Done' : (t.isOverdue ? 'Overdue' : 'In progress'),
+                            style: TextStyle(
+                              fontSize: 9, 
+                              fontWeight: FontWeight.bold,
+                              color: t.status == 'completed' ? Colors.green : (t.isOverdue ? Colors.red : Colors.grey),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildWorkActivityHeatmap(ThemeData th, bool isDark, List<CompletionTrendItem>? trend) {
-    // We'll show 15 weeks = 105 days
+  Widget _buildWorkActivityHeatmap(ThemeData th, bool isDark, List<Task> tasks) {
+    // 49 days (7 weeks) logic matching React
     final Map<String, int> dailyActivity = {};
-    if (trend != null) {
-      for (var item in trend) {
-        final dayStr = item.day.split('T')[0];
-        dailyActivity[dayStr] = item.completed;
-      }
+    for (var task in tasks) {
+      // Use startDate or updatedAt since createdAt is not in the model
+      final date = task.startDate ?? task.updatedAt;
+      final dayStr = DateFormat('yyyy-MM-dd').format(date);
+      dailyActivity[dayStr] = (dailyActivity[dayStr] ?? 0) + 1;
     }
 
     final today = DateTime.now();
-    // Adjust to end of current week (Saturday)
-    final endDate = today.add(Duration(days: 6 - today.weekday)); 
-    final startDate = endDate.subtract(const Duration(days: 104)); // 15 weeks total
+    final todayTruncated = DateTime(today.year, today.month, today.day);
+    // 49 days history
+    final startDate = todayTruncated.subtract(const Duration(days: 48));
 
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: isDark ? Colors.white.withAlpha(13) : Colors.white,
         borderRadius: BorderRadius.circular(32),
+        boxShadow: isDark ? null : [BoxShadow(color: Colors.black.withAlpha(5), blurRadius: 20, offset: const Offset(0, 10))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -656,20 +739,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.black12, borderRadius: BorderRadius.circular(12)),
-                child: const Text('Last 15 Weeks', style: TextStyle(fontSize: 10, fontFamily: 'monospace')),
+                child: const Text('Last 7 Weeks', style: TextStyle(fontSize: 10, fontFamily: 'monospace')),
               )
             ],
           ),
           const SizedBox(height: 20),
           
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            reverse: true, // Show most recent on the right
-            child: Row(
-              children: List.generate(15, (weekIdx) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6.0),
-                  child: Column(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: List.generate(7, (weekIdx) {
+                  return Column(
                     children: List.generate(7, (dayIdx) {
                       final dayInTotal = (weekIdx * 7) + dayIdx;
                       final date = startDate.add(Duration(days: dayInTotal));
@@ -677,40 +758,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       final count = dailyActivity[dateStr] ?? 0;
                       
                       Color color;
-                      if (count == 0) color = isDark ? Colors.white.withAlpha(15) : Colors.black.withAlpha(10);
-                      else if (count < 2) color = th.colorScheme.primary.withAlpha(60);
-                      else if (count < 4) color = th.colorScheme.primary.withAlpha(140);
-                      else if (count < 7) color = th.colorScheme.primary.withAlpha(200);
+                      if (count == 0) color = isDark ? Colors.white.withAlpha(15) : Colors.black.withAlpha(5);
+                      else if (count < 3) color = th.colorScheme.primary.withAlpha(60);
+                      else if (count < 6) color = th.colorScheme.primary.withAlpha(140);
+                      else if (count < 10) color = th.colorScheme.primary.withAlpha(200);
                       else color = th.colorScheme.primary;
 
                       return GestureDetector(
                         onTap: () {
+                          final label = count > 0 ? '$count task${count > 1 ? 's' : ''}' : 'No activity';
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('${DateFormat('MMM dd').format(date)}: $count tasks completed'),
+                              content: Text('$label on ${DateFormat('MMM dd').format(date)}', 
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
+                              backgroundColor: th.colorScheme.primary,
                               duration: const Duration(seconds: 1),
                               behavior: SnackBarBehavior.floating,
                               margin: const EdgeInsets.all(20),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              backgroundColor: th.colorScheme.primary,
                             ),
                           );
                         },
                         child: Container(
-                          width: 14,
-                          height: 14,
+                          width: (constraints.maxWidth - 40) / 7,
+                          height: (constraints.maxWidth - 40) / 7,
                           margin: const EdgeInsets.only(bottom: 4),
                           decoration: BoxDecoration(
                             color: color,
-                            borderRadius: BorderRadius.circular(3),
+                            shape: BoxShape.circle,
                           ),
                         ),
                       );
                     }),
-                  ),
-                );
-              }),
-            ),
+                  );
+                }),
+              );
+            }
           ),
           const SizedBox(height: 16),
           // Legend
@@ -742,7 +825,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildRecentTasks(ThemeData th, bool isDark, List<dynamic> tasks) {
+  Widget _buildRecentTasks(ThemeData th, bool isDark, List<Task> tasks) {
     final recent = tasks.take(5).toList();
     if (recent.isEmpty) return const SizedBox.shrink();
 

@@ -31,12 +31,14 @@ class _BoardScreenState extends State<BoardScreen> {
   final _pointInputController = TextEditingController();
   final _startDateController = TextEditingController();
   final _endDateController = TextEditingController();
+  final _dueTimeController = TextEditingController();
 
   String _status = 'pending';
   String _priority = 'medium';
   final List<String> _points = [];
   final List<int> _selectedAssigneeIds = [];
-  String _dueTime = '12:00';
+  String _dueTime = DateFormat('HH:mm').format(DateTime.now());
+  // Removed initialization here to use controller
   String _userSearchQuery = '';
 
   @override
@@ -77,6 +79,7 @@ class _BoardScreenState extends State<BoardScreen> {
     _pointInputController.dispose();
     _startDateController.dispose();
     _endDateController.dispose();
+    _dueTimeController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -140,13 +143,13 @@ class _BoardScreenState extends State<BoardScreen> {
           .parse(_endDateController.text)
           .add(
         Duration(
-          hours: int.parse(_dueTime.split(':')[0]),
-          minutes: int.parse(_dueTime.split(':')[1]),
+          hours: DateFormat('hh:mm a').parse(_dueTimeController.text).hour,
+          minutes: DateFormat('hh:mm a').parse(_dueTimeController.text).minute,
         ),
       )
           .toIso8601String()
           : null,
-      'points': _points.map((p) => {'label': p}).toList(),
+      'points': _points,
       'creatorId': auth.user?['id'],
       'assigneeIds': _selectedAssigneeIds,
     };
@@ -170,11 +173,12 @@ class _BoardScreenState extends State<BoardScreen> {
     _pointInputController.clear();
     _startDateController.clear();
     _endDateController.clear();
+    _dueTimeController.text = DateFormat('hh:mm a').format(DateTime.now());
     _status = 'pending';
     _priority = 'medium';
     _points.clear();
     _selectedAssigneeIds.clear();
-    _dueTime = '12:00';
+    // _dueTime will be retrieved from controller text
     _userSearchQuery = '';
 
     context.read<AdminProvider>().fetchUsers();
@@ -522,29 +526,26 @@ class _BoardScreenState extends State<BoardScreen> {
                                     children: [
                                       _buildLabel('Time'),
                                       TextField(
+                                        controller: _dueTimeController,
                                         readOnly: true,
-                                        enabled:
-                                        _endDateController.text.isNotEmpty,
                                         onTap: () async {
                                           final TimeOfDay? picked =
                                           await showTimePicker(
                                             context: context,
                                             initialTime: TimeOfDay(
-                                                hour: int.parse(
-                                                    _dueTime.split(':')[0]),
-                                                minute: int.parse(
-                                                    _dueTime.split(':')[1])),
+                                                hour: DateFormat('hh:mm a').parse(_dueTimeController.text).hour,
+                                              minute: DateFormat('hh:mm a').parse(_dueTimeController.text).minute),
                                           );
                                           if (picked != null) {
                                             setModalState(() {
-                                              _dueTime =
-                                              '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+                                              final now = DateTime.now();
+                                              final dt = DateTime(now.year, now.month, now.day, picked.hour, picked.minute);
+                                              _dueTimeController.text = DateFormat('hh:mm a').format(dt);
                                             });
                                           }
                                         },
                                         style: const TextStyle(fontSize: 13),
                                         decoration: InputDecoration(
-                                          hintText: _dueTime,
                                           prefixIcon: const Icon(
                                               LucideIcons.clock,
                                               size: 16),
@@ -999,7 +1000,21 @@ class _BoardScreenState extends State<BoardScreen> {
     };
 
     final filteredTasks = tp.tasks.where((t) {
-      final matchesStatus = t.status == statusMap[_selectedTab];
+      final status = statusMap[_selectedTab];
+      final isPct100 = t.progressPercent == 100;
+      
+      bool matchesStatus = false;
+      if (_selectedTab == 'Completed') {
+        // Show tasks explicitly marked 'completed' OR those with 100% progress
+        matchesStatus = t.status == 'completed' || isPct100;
+      } else if (_selectedTab == 'In Progress') {
+        // Show tasks that are 'in_progress' AND not yet 100%
+        matchesStatus = t.status == 'in_progress' && !isPct100;
+      } else {
+        // For Pending/Hold, just use the status
+        matchesStatus = t.status == status;
+      }
+      
       if (!matchesStatus) return false;
 
       if (_searchQuery.isEmpty) return true;

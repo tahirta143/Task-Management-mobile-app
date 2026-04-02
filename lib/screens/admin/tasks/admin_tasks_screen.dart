@@ -212,12 +212,42 @@ class _AdminTasksScreenState extends State<AdminTasksScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${t.status.toUpperCase()} • ${t.priority.toUpperCase()} • ${t.points.length} points',
-                          style: const TextStyle(fontSize: 10, color: Colors.grey),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            if (t.assignees.isNotEmpty) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: th.colorScheme.primary.withAlpha(30),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: th.colorScheme.primary.withAlpha(50)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(LucideIcons.user, size: 10, color: Colors.grey),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      t.assignees[0].username,
+                                      style: TextStyle(fontSize: 10, color: th.colorScheme.primary, fontWeight: FontWeight.bold),
+                                    ),
+                                    if (t.assignees.length > 1)
+                                      Text(' +${t.assignees.length - 1}', style: TextStyle(fontSize: 10, color: th.colorScheme.primary)),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            Expanded(
+                              child: Text(
+                                '${t.status.toUpperCase()} • ${t.priority.toUpperCase()} • ${t.points.length} points',
+                                style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),

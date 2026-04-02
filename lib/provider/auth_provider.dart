@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/api_client.dart';
-// import '../services/api_client.dart';
+import '../services/socket_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   String? _token;
@@ -98,6 +98,9 @@ class AuthProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('tm_token');
     await prefs.remove('tm_user');
+    
+    // Clear socket connection so next login uses new token
+    SocketService().disconnect();
     
     notifyListeners();
   }
