@@ -93,11 +93,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     const SizedBox(height: 24),
                     _buildFormCard(sw, sh, th, isDark, authState),
-                    _buildDivider(sw, sh, th, isDark),
-                    _buildSocialRow(sw, sh, th, isDark),
-                    const SizedBox(height: 16),
-                    _buildSignUpRow(sw, th),
-                    const SizedBox(height: 12),
+                    // _buildDivider(sw, sh, th, isDark),
+                    // _buildSocialRow(sw, sh, th, isDark),
+                    // const SizedBox(height: 16),
+                    // _buildSignUpRow(sw, th),
+                    // const SizedBox(height: 12),
                     // _buildDeveloperCredit(sw, th),
                     const SizedBox(height: 32),
                   ],
@@ -296,75 +296,75 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildDivider(double sw, double sh, ThemeData th, bool isDark) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24),
-      child: Row(
-        children: [
-          Expanded(child: Divider(color: (isDark ? Colors.white : Colors.black).withAlpha(30))),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text("or continue with", style: TextStyle(color: Colors.grey, fontSize: sw * 0.03)),
-          ),
-          Expanded(child: Divider(color: (isDark ? Colors.white : Colors.black).withAlpha(30))),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSocialRow(double sw, double sh, ThemeData th, bool isDark) {
-    return Row(
-      children: [
-        Expanded(child: _buildSocialBtn("Google", LucideIcons.chrome, Colors.red, sw, sh, th, isDark)),
-        const SizedBox(width: 12),
-        Expanded(child: _buildSocialBtn("Apple", LucideIcons.apple, isDark ? Colors.white : Colors.black, sw, sh, th, isDark)),
-      ],
-    );
-  }
-
-  Widget _buildSocialBtn(String label, IconData icon, Color iconColor, double sw, double sh, ThemeData th, bool isDark) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? th.colorScheme.surface : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(isDark ? 30 : 8),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
-        ],
-      ),
-      child: InkWell(
-        onTap: () {},
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: iconColor, size: sw * 0.045),
-              const SizedBox(width: 8),
-              Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSignUpRow(double sw, ThemeData th) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Text("Don't have an account?", style: TextStyle(color: Colors.grey, fontSize: 13)),
-        TextButton(
-          onPressed: () {}, // Not implemented yet
-          child: Text("Sign Up", style: TextStyle(color: th.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 13)),
-        ),
-      ],
-    );
-  }
+  // Widget _buildDivider(double sw, double sh, ThemeData th, bool isDark) {
+  //   return Padding(
+  //     padding: const EdgeInsets.symmetric(vertical: 24),
+  //     child: Row(
+  //       children: [
+  //         Expanded(child: Divider(color: (isDark ? Colors.white : Colors.black).withAlpha(30))),
+  //         Padding(
+  //           padding: const EdgeInsets.symmetric(horizontal: 16),
+  //           child: Text("or continue with", style: TextStyle(color: Colors.grey, fontSize: sw * 0.03)),
+  //         ),
+  //         Expanded(child: Divider(color: (isDark ? Colors.white : Colors.black).withAlpha(30))),
+  //       ],
+  //     ),
+  //   );
+  // }
+  //
+  // Widget _buildSocialRow(double sw, double sh, ThemeData th, bool isDark) {
+  //   return Row(
+  //     children: [
+  //       Expanded(child: _buildSocialBtn("Google", LucideIcons.chrome, Colors.red, sw, sh, th, isDark)),
+  //       const SizedBox(width: 12),
+  //       Expanded(child: _buildSocialBtn("Apple", LucideIcons.apple, isDark ? Colors.white : Colors.black, sw, sh, th, isDark)),
+  //     ],
+  //   );
+  // }
+  //
+  // Widget _buildSocialBtn(String label, IconData icon, Color iconColor, double sw, double sh, ThemeData th, bool isDark) {
+  //   return Container(
+  //     decoration: BoxDecoration(
+  //       color: isDark ? th.colorScheme.surface : Colors.white,
+  //       borderRadius: BorderRadius.circular(16),
+  //       boxShadow: [
+  //         BoxShadow(
+  //           color: Colors.black.withAlpha(isDark ? 30 : 8),
+  //           blurRadius: 10,
+  //           offset: const Offset(0, 4),
+  //         )
+  //       ],
+  //     ),
+  //     child: InkWell(
+  //       onTap: () {},
+  //       borderRadius: BorderRadius.circular(16),
+  //       child: Padding(
+  //         padding: const EdgeInsets.symmetric(vertical: 14),
+  //         child: Row(
+  //           mainAxisAlignment: MainAxisAlignment.center,
+  //           children: [
+  //             Icon(icon, color: iconColor, size: sw * 0.045),
+  //             const SizedBox(width: 8),
+  //             Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+  //           ],
+  //         ),
+  //       ),
+  //     ),
+  //   );
+  // }
+  //
+  // Widget _buildSignUpRow(double sw, ThemeData th) {
+  //   return Row(
+  //     mainAxisAlignment: MainAxisAlignment.center,
+  //     children: [
+  //       const Text("Don't have an account?", style: TextStyle(color: Colors.grey, fontSize: 13)),
+  //       TextButton(
+  //         onPressed: () {}, // Not implemented yet
+  //         child: Text("Sign Up", style: TextStyle(color: th.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 13)),
+  //       ),
+  //     ],
+  //   );
+  // }
 
   // Widget _buildDeveloperCredit(double sw, ThemeData th) {
   //   return Row(
