@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "317375132525",
+    "project_id": "afaq-task-manager",
+    "storage_bucket": "afaq-task-manager.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:317375132525:android:ae72bb3ea5af802d38e064",
+        "android_client_info": {
+          "package_name": "com.example.task_manager"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDIgF3FfzpaCiPGBYqLIGuDduzlFSOeUeg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

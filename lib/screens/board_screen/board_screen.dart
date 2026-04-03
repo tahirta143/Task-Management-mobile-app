@@ -12,6 +12,7 @@ import '../../provider/task_provider.dart';
 import '../../provider/auth_provider.dart';
 import '../../models/task_model.dart';
 import '../../widgets/custom_loader.dart';
+import '../../widgets/task_evaluation_dialog.dart';
 
 class BoardScreen extends StatefulWidget {
   const BoardScreen({super.key});
@@ -1090,6 +1091,13 @@ class _BoardScreenState extends State<BoardScreen> {
 
     return GestureDetector(
       onTap: () {
+        if (task.status == 'completed' || task.progressPercent == 100) {
+          showDialog(
+            context: context,
+            builder: (context) => TaskEvaluationDialog(task: task),
+          ).then((_) => context.read<TaskProvider>().fetchTasks());
+          return;
+        }
         Navigator.push(
           context,
           MaterialPageRoute(

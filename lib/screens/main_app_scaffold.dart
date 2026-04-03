@@ -21,6 +21,7 @@ import 'admin/users/admin_users_screen.dart';
 import 'admin/reports/admin_reports_screen.dart';
 import 'admin/copmanies/admin_companies_screen.dart';
 import 'admin/tasks/admin_tasks_screen.dart';
+import 'admin/admin_tracking/admin_tracking_screen.dart';
 
 class MainAppScaffold extends StatefulWidget {
   const MainAppScaffold({super.key});
@@ -702,6 +703,12 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                             label: 'Tasks',
                             onTap: () => _navigateToAdmin(
                                 const AdminTasksScreen(), 'Admin Tasks'),
+                          ),
+                          _NavItem(
+                            icon: LucideIcons.activity,
+                            label: 'Tracking',
+                            onTap: () => _navigateToAdmin(
+                                const AdminTrackingScreen(), 'Session Tracking'),
                           ),
                         ],
                       ],

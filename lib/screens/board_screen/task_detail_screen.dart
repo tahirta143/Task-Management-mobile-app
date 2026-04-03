@@ -243,7 +243,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final isDark = th.brightness == Brightness.dark;
     final me = context.watch<AuthProvider>().user;
     final isAdmin = me?['role'] == 'admin';
-    final canChat = _task != null && (_task!.status != 'pending' || isAdmin);
+    final canChat = _task != null;
 
     final mq = MediaQuery.of(context);
     final bottomInset = mq.viewInsets.bottom;
@@ -319,20 +319,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
           // Input
           if (canChat) 
-            _buildInput(th, isDark, bottomInset, bottomPadding)
-          else
-            Container(
-              padding: const EdgeInsets.all(24),
-              width: double.infinity,
-              color: isDark ? Colors.white.withAlpha(5) : Colors.black.withAlpha(5),
-              child: Column(
-                children: [
-                  const Text('🔒', style: TextStyle(fontSize: 24)),
-                  const SizedBox(height: 8),
-                  Text('Chat is disabled until the task is in progress.', style: TextStyle(fontSize: 13, color: Colors.grey[500], fontWeight: FontWeight.w500)),
-                ],
-              ),
-            ),
+            _buildInput(th, isDark, bottomInset, bottomPadding),
         ],
       ),
     );

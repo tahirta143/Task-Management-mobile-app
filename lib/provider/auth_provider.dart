@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 import '../services/api_client.dart';
 import '../services/socket_service.dart';
@@ -20,7 +21,16 @@ class AuthProvider extends ChangeNotifier {
 
   AuthProvider() {
     _loadAuthFromPrefs();
+    _initSessionListener();
   }
+
+  void _initSessionListener() {
+    SocketService().listenForSessionTerminated((payload) {
+      debugPrint('SESSION TERMINATED: ${payload['message']}');
+      logout(); // Perform logout and notify listeners
+    });
+  }
+
 
   Future<void> _loadAuthFromPrefs() async {
     try {
@@ -44,6 +54,10 @@ class AuthProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+      // If authenticated on load, ensure FCM token is registered
+      if (isAuthenticated) {
+        _updateFcmToken();
+      }
     }
   }
 
@@ -78,6 +92,9 @@ class AuthProvider extends ChangeNotifier {
 
       _isLoading = false;
       notifyListeners();
+      
+      // Register FCM Token after successful login
+      _updateFcmToken();
     } on ApiException catch (e) {
       _error = e.message;
       _isLoading = false;
@@ -243,6 +260,25 @@ class AuthProvider extends ChangeNotifier {
     if (_error != null) {
       _error = null;
       notifyListeners();
+    }
+  }
+
+  /// Fetches and registers the FCM token for the current user.
+  Future<void> _updateFcmToken() async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+      
+      // Request permission (redundant if already done in LocalNotificationService but safe)
+      await messaging.requestPermission();
+
+      final token = await messaging.getToken();
+      if (token != null) {
+        debugPrint('FCM Token: $token');
+        await ApiClient().patch('/api/auth/me/fcm-token', body: {'fcmToken': token});
+        debugPrint('FCM Token Registered Successfully');
+      }
+    } catch (e) {
+      debugPrint('Failed to register FCM token: $e');
     }
   }
 }

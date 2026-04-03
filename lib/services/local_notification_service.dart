@@ -1,12 +1,13 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../main.dart';
 import '../screens/chat_screen/chat_detail_screen.dart';
 import '../screens/board_screen/task_detail_screen.dart';
 
 /// Singleton service for showing OS-level system tray notifications.
-/// Works even when the app is backgrounded / screen is locked.
+/// Now expanded to handle Firebase Cloud Messaging (FCM).
 class LocalNotificationService {
   static final LocalNotificationService _instance =
       LocalNotificationService._internal();
@@ -60,15 +61,96 @@ class LocalNotificationService {
         }
       },
     );
+    
+    // Create high-importance channel for Android
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(const AndroidNotificationChannel(
+          _channelId,
+          _channelName,
+          description: _channelDesc,
+          importance: Importance.max,
+          playSound: true,
+          enableVibration: true,
+        ));
 
-    // Request permission on Android 13+
-    // Note: We don't await this if we're in background as it's a UI action
+    // --- Firebase Messaging Setup ---
+    final FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+    // 1. Request Permission (iOS / Android 13+)
+    await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // 2. Handle Foreground Messages
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      debugPrint('FCM Foreground Message: ${message.notification?.title}');
+      _handleRemoteMessage(message);
+    });
+
+    // 3. Handle Notification Clicks (When app is backgrounded)
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      debugPrint('FCM Notification Clicked: ${message.notification?.title}');
+      _handleRemoteMessageTap(message);
+    });
+
+    // 4. Handle Notification Clicks (When app is terminated/closed)
+    final RemoteMessage? initialMessage =
+        await FirebaseMessaging.instance.getInitialMessage();
+    if (initialMessage != null) {
+      debugPrint('App opened from terminated state via FCM: ${initialMessage.notification?.title}');
+      // Small delay to ensure navigator is ready
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _handleRemoteMessageTap(initialMessage);
+      });
+    }
+
+    // 5. Handle Local Notification Clicks (When app is terminated)
+    final NotificationAppLaunchDetails? launchDetails =
+        await _plugin.getNotificationAppLaunchDetails();
+    if (launchDetails?.didNotificationLaunchApp ?? false) {
+      final payload = launchDetails?.notificationResponse?.payload;
+      if (payload != null) {
+        debugPrint('App opened from terminated state via Local Notification');
+        Future.delayed(const Duration(milliseconds: 500), () {
+          _onNotificationTap(payload);
+        });
+      }
+    }
+
+    // Request local notification permission on Android 13+
     _plugin
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
 
     _initialized = true;
+  }
+
+  /// Extracts data from a RemoteMessage and shows a local notification if needed.
+  void _handleRemoteMessage(RemoteMessage message) {
+    if (message.notification != null) {
+      final data = message.data;
+      final payload = data.isNotEmpty ? jsonEncode(data) : null;
+      
+      show(
+        id: message.hashCode,
+        title: message.notification!.title ?? 'New Notification',
+        body: message.notification!.body ?? '',
+        payload: payload,
+      );
+    }
+  }
+
+  /// Directly handles the navigation when a Firebase notification is tapped.
+  void _handleRemoteMessageTap(RemoteMessage message) {
+    final data = message.data;
+    if (data.isNotEmpty) {
+      _onNotificationTap(jsonEncode(data));
+    }
   }
 
   // ─── Click Handler ────────────────────────────────────────────────────────
@@ -88,7 +170,7 @@ class LocalNotificationService {
         navigatorKey.currentState?.push(
           MaterialPageRoute(
             builder: (_) => ChatDetailScreen(
-              taskId: taskId is int ? taskId : int.parse(taskId.toString()),
+              taskId: int.parse(taskId.toString()),
               taskTitle: data['taskTitle'] ?? 'Chat',
             ),
           ),
@@ -97,7 +179,7 @@ class LocalNotificationService {
         navigatorKey.currentState?.push(
           MaterialPageRoute(
             builder: (_) => TaskDetailScreen(
-              taskId: taskId is int ? taskId : int.parse(taskId.toString()),
+              taskId: int.parse(taskId.toString()),
             ),
           ),
         );

@@ -4,6 +4,7 @@ import '../models/user_model.dart';
 import '../models/company_model.dart';
 import '../models/report_models.dart';
 import '../models/task_model.dart';
+import '../models/session_model.dart';
 import '../services/api_client.dart';
 
 class AdminProvider extends ChangeNotifier {
@@ -14,6 +15,7 @@ class AdminProvider extends ChangeNotifier {
   List<UserPerformance> _userPerformance = [];
   List<CompanySummary> _companySummary = [];
   List<Task> _progressTasks = [];
+  List<SessionTracking> _sessions = [];
 
   // Filter State
   String _datePreset = 'all';
@@ -29,6 +31,7 @@ class AdminProvider extends ChangeNotifier {
   List<UserPerformance> get userPerformance => _userPerformance;
   List<CompanySummary> get companySummary => _companySummary;
   List<Task> get progressTasks => _progressTasks;
+  List<SessionTracking> get sessions => _sessions;
   
   String get datePreset => _datePreset;
   DateTimeRange? get customRange => _customRange;
@@ -241,5 +244,44 @@ class AdminProvider extends ChangeNotifier {
       
       return inDateRange && matchesUser;
     }).toList();
+  }
+
+  // Session Tracking
+  Future<void> fetchTrackedSessions() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final response = await _api.get('/api/sessions/tracking');
+      final List<dynamic> items = response['items'] ?? [];
+      _sessions = items.map((s) => SessionTracking.fromJson(s)).toList();
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> killSession(String sessionTokenId) async {
+    try {
+      await _api.delete('/api/sessions/tracking/$sessionTokenId');
+      _sessions.removeWhere((s) => s.sessionTokenId == sessionTokenId);
+      notifyListeners();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> killAllUserSessions(int userId) async {
+    try {
+      await _api.delete('/api/sessions/tracking/user/$userId');
+      _sessions.removeWhere((s) => s.user.id == userId);
+      notifyListeners();
+    } catch (e) {
+      rethrow;
+    }
   }
 }

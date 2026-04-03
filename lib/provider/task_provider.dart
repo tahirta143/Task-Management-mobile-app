@@ -1,4 +1,6 @@
 import 'dart:io';
+
+import '../models/evaluation_model.dart';
 import 'package:flutter/cupertino.dart';
 
 import '../models/task_model.dart';
@@ -174,4 +176,25 @@ class TaskProvider extends ChangeNotifier {
   }
 
   void markTaskAsRead(int taskId) {}
+
+  // Evaluations
+  Future<List<Evaluation>> fetchEvaluations(int taskId) async {
+    try {
+      final response = await _api.get('/api/tasks/$taskId/evaluations');
+      final List<dynamic> items = response['items'] ?? [];
+      return items.map((e) => Evaluation.fromJson(e)).toList();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<List<Evaluation>> saveEvaluation(int taskId, Map<String, dynamic> data) async {
+    try {
+      final response = await _api.post('/api/tasks/$taskId/evaluations', body: data);
+      final List<dynamic> items = response['items'] ?? [];
+      return items.map((e) => Evaluation.fromJson(e)).toList();
+    } catch (e) {
+      rethrow;
+    }
+  }
 }

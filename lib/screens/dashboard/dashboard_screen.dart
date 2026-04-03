@@ -26,7 +26,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   File? _imageFile;
   final ImagePicker _picker = ImagePicker();
-  
+
   String? _weatherTemp;
   IconData _weatherIcon = LucideIcons.sun;
   Color _weatherColor = Colors.amber;
@@ -41,14 +41,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _fetchWeather() async {
     try {
-      // 1. Get Geo Location from IP
       final geoRes = await http.get(Uri.parse('https://get.geojs.io/v1/ip/geo.json'));
       if (geoRes.statusCode != 200) return;
       final geoData = json.decode(geoRes.body);
       final lat = geoData['latitude'];
       final lon = geoData['longitude'];
 
-      // 2. Get Weather from Open-Meteo
       final weatherRes = await http.get(Uri.parse(
           'https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current_weather=true'));
       if (weatherRes.statusCode != 200) return;
@@ -106,27 +104,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _isUploading = true;
         });
 
-        // Auto-upload to server
         try {
           final auth = context.read<AuthProvider>();
           await auth.updateProfileImage(_imageFile!);
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Profile image updated successfully'), backgroundColor: Colors.green),
+              const SnackBar(
+                  content: Text('Profile image updated successfully'),
+                  backgroundColor: Colors.green),
             );
           }
         } catch (e) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.red),
+              SnackBar(
+                  content: Text('Upload failed: $e'),
+                  backgroundColor: Colors.red),
             );
           }
         } finally {
-          if (mounted) {
-            setState(() {
-              _isUploading = false;
-            });
-          }
+          if (mounted) setState(() => _isUploading = false);
         }
       }
     } catch (e) {
@@ -138,7 +135,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final th = Theme.of(context);
     final isDark = th.brightness == Brightness.dark;
-    final w = MediaQuery.of(context).size.width;
     final auth = Provider.of<AuthProvider>(context);
     final admin = Provider.of<AdminProvider>(context);
     final tp = Provider.of<TaskProvider>(context);
@@ -156,40 +152,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
         },
         child: isLoading
             ? LayoutBuilder(
-                builder: (context, constraints) {
-                  return SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    child: ConstrainedBox(
-                      constraints:
-                          BoxConstraints(minHeight: constraints.maxHeight),
-                      child: const Center(
-                        child: CustomLoader(),
-                      ),
-                    ),
-                  );
-                },
-              )
-            : SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildAnimatedBlock(0, _buildHeader(th)),
-                    const SizedBox(height: 24),
-                    _buildAnimatedBlock(100, _buildProfileCard(isDark, th, user, isAdmin)),
-                    const SizedBox(height: 16),
-                    _buildAnimatedBlock(200, _buildMiniStatsGrid(th, isDark, admin, tp, isAdmin)),
-                    const SizedBox(height: 16),
-                    _buildAnimatedBlock(600, _buildTaskProgressList(th, isDark, tp.tasks)),
-                    const SizedBox(height: 16),
-                    _buildAnimatedBlock(700, _buildWorkActivityHeatmap(th, isDark, tp.tasks)),
-                    const SizedBox(height: 16),
-                    _buildAnimatedBlock(800, _buildRecentTasks(th, isDark, tp.tasks)),
-                    const SizedBox(height: 32),
-                  ],
-                ),
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: ConstrainedBox(
+                constraints:
+                BoxConstraints(minHeight: constraints.maxHeight),
+                child: const Center(child: CustomLoader()),
               ),
+            );
+          },
+        )
+            : SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildAnimatedBlock(0, _buildHeader(th)),
+              const SizedBox(height: 24),
+              _buildAnimatedBlock(
+                  100, _buildProfileCard(isDark, th, user, isAdmin)),
+              const SizedBox(height: 16),
+              _buildAnimatedBlock(200,
+                  _buildMiniStatsGrid(th, isDark, admin, tp, isAdmin)),
+              const SizedBox(height: 16),
+              _buildAnimatedBlock(
+                  600, _buildTaskProgressList(th, isDark, tp.tasks)),
+              const SizedBox(height: 16),
+              _buildAnimatedBlock(
+                  700, _buildWorkActivityHeatmap(th, isDark, tp.tasks)),
+              const SizedBox(height: 16),
+              _buildAnimatedBlock(
+                  800, _buildRecentTasks(th, isDark, tp.tasks)),
+              const SizedBox(height: 32),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -220,353 +219,298 @@ class _DashboardScreenState extends State<DashboardScreen> {
       children: [
         const Text(
           'Overview Dashboard',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: -0.5),
+          style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -0.5),
         ),
         const SizedBox(height: 4),
         Row(
           children: [
-            Text(dateStr, style: TextStyle(fontSize: 14, color: th.textTheme.bodySmall?.color)),
+            Text(dateStr,
+                style: TextStyle(
+                    fontSize: 14, color: th.textTheme.bodySmall?.color)),
             const SizedBox(width: 8),
             const Text('•', style: TextStyle(color: Colors.grey)),
             const SizedBox(width: 8),
             Icon(_weatherIcon, size: 16, color: _weatherColor),
             const SizedBox(width: 4),
-            Text(_weatherTemp ?? '--°C', style: TextStyle(fontSize: 14, color: _weatherColor, fontWeight: FontWeight.bold))
+            Text(_weatherTemp ?? '--°C',
+                style: TextStyle(
+                    fontSize: 14,
+                    color: _weatherColor,
+                    fontWeight: FontWeight.bold)),
           ],
-        )
+        ),
       ],
     );
   }
 
-  Widget _buildProfileCard(bool isDark, ThemeData th, Map<String, dynamic>? user, bool isAdmin) {
+  // ─────────────────────────────────────────────────────────────────────────
+  // PROFILE CARD — full-bleed image at top, name + role badges at bottom
+  // ─────────────────────────────────────────────────────────────────────────
+  Widget _buildProfileCard(
+      bool isDark, ThemeData th, Map<String, dynamic>? user, bool isAdmin) {
     final String? profileUrl = user?['profileImageUrl'];
-    final String fullUrl = profileUrl == null ? '' : (profileUrl.startsWith('http') ? profileUrl : '${context.read<SocketService>().baseUrl}${profileUrl.startsWith('/') ? '' : '/'}$profileUrl');
+    final String fullUrl = profileUrl == null
+        ? ''
+        : (profileUrl.startsWith('http')
+        ? profileUrl
+        : '${context.read<SocketService>().baseUrl}${profileUrl.startsWith('/') ? '' : '/'}$profileUrl');
+
+    final ImageProvider? imageProvider = _imageFile != null
+        ? FileImage(_imageFile!) as ImageProvider
+        : (profileUrl != null ? NetworkImage(fullUrl) : null);
 
     return Container(
       decoration: BoxDecoration(
         color: isDark ? Colors.white.withAlpha(13) : Colors.white,
         borderRadius: BorderRadius.circular(32),
-        boxShadow: isDark ? null : [BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 20, offset: const Offset(0, 10))],
+        boxShadow: isDark
+            ? null
+            : [
+          BoxShadow(
+              color: Colors.black.withAlpha(8),
+              blurRadius: 20,
+              offset: const Offset(0, 10))
+        ],
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              // Banner Area
-              Container(
-                height: 120,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-                  gradient: LinearGradient(
-                    colors: isDark 
-                      ? [Colors.blueGrey.withAlpha(40), Colors.black26] 
-                      : [th.colorScheme.primary.withAlpha(40), th.colorScheme.primary.withAlpha(10)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-              ),
-              // DP Avatar
-              Positioned(
-                bottom: -40,
-                left: 24,
-                child: GestureDetector(
-                  onTap: _pickImage,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1A1D21) : Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(color: Colors.black.withAlpha(30), blurRadius: 15, offset: const Offset(0, 8))],
-                    ),
-                    child: CircleAvatar(
-                      radius: 46,
-                      backgroundColor: isDark ? Colors.white10 : Colors.black.withAlpha(5),
-                      backgroundImage: _imageFile != null 
-                        ? FileImage(_imageFile!) as ImageProvider
-                        : (profileUrl != null ? NetworkImage(fullUrl) : null),
-                      child: (_imageFile == null && profileUrl == null)
-                        ? Icon(LucideIcons.user, size: 40, color: Colors.grey.withAlpha(100))
-                        : null,
-                    ),
-                  ),
-                ),
-              ),
-              // Camera Icon Overlay for DP
-              Positioned(
-                bottom: -40,
-                left: 24 + 68,
-                child: GestureDetector(
-                  onTap: _pickImage,
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: th.colorScheme.primary,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: isDark ? const Color(0xFF1A1D21) : Colors.white, width: 2),
-                    ),
-                    child: const Icon(LucideIcons.camera, size: 12, color: Colors.black),
-                  ),
-                ),
-              ),
-              if (_isUploading)
-                Positioned(
-                  bottom: -40,
-                  left: 24,
-                  child: IgnorePointer(
-                    child: Container(
-                      width: 100, // Roughly matching avatar + padding
-                      height: 100,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withAlpha(50),
-                        shape: BoxShape.circle,
+          // ── Full-bleed image area ──────────────────────────────────────
+          GestureDetector(
+            onTap: _pickImage,
+            child: SizedBox(
+              height: 150,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Image or placeholder
+                  imageProvider != null
+                      ? Image(
+                    image: imageProvider,
+                    fit: BoxFit.cover,
+                  )
+                      : Container(
+                    color: isDark
+                        ? Colors.white.withAlpha(18)
+                        : th.colorScheme.primary.withAlpha(20),
+                    child: Center(
+                      child: Icon(
+                        LucideIcons.user,
+                        size: 64,
+                        color: th.colorScheme.primary.withAlpha(80),
                       ),
+                    ),
+                  ),
+
+                  // Upload spinner overlay
+                  if (_isUploading)
+                    Container(
+                      color: Colors.black.withAlpha(80),
                       child: const Center(
-                        child: CustomLoader(size: 20, color: Colors.white),
+                          child: CustomLoader(size: 28, color: Colors.white)),
+                    ),
+
+                  // Camera button — bottom-right corner
+                  Positioned(
+                    bottom: 12,
+                    right: 12,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.black.withAlpha(160)
+                            : Colors.white.withAlpha(220),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: isDark
+                                ? Colors.white.withAlpha(40)
+                                : Colors.black.withAlpha(15)),
+                      ),
+                      child: Icon(
+                        LucideIcons.camera,
+                        size: 16,
+                        color: isDark ? Colors.white : Colors.black87,
                       ),
                     ),
                   ),
-                ),
-            ],
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 50),
+
+          // ── Name + badges + activity icon ─────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+            padding: const EdgeInsets.fromLTRB(22, 18, 22, 20),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(user?['username'] ?? 'Current User', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
-                    const SizedBox(height: 2),
-                    Text(isAdmin ? 'Administrator' : 'Team Member', style: TextStyle(fontSize: 13, color: th.textTheme.bodySmall?.color, fontWeight: FontWeight.w500)),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        user?['username'] ?? 'Current User',
+                        style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: -0.5),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          // Role badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: th.colorScheme.primary.withAlpha(30),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              isAdmin ? 'Administrator' : 'Member',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: th.colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                          // Team badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.white.withAlpha(18)
+                                  : Colors.black.withAlpha(8),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              'Team Member',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.white70 : Colors.black54,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 12),
+                // Activity icon button
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: th.colorScheme.primary.withAlpha(30),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(LucideIcons.activity, color: th.colorScheme.primary, size: 20),
-                )
+                  child: Icon(LucideIcons.activity,
+                      color: th.colorScheme.primary, size: 20),
+                ),
               ],
             ),
-          )
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildMiniStatsGrid(ThemeData th, bool isDark, AdminProvider admin, TaskProvider tp, bool isAdmin) {
+  Widget _buildMiniStatsGrid(ThemeData th, bool isDark, AdminProvider admin,
+      TaskProvider tp, bool isAdmin) {
     if (isAdmin && admin.overview != null) {
       final ov = admin.overview!;
       return Row(
         children: [
-          Expanded(child: _buildStatCard(th, isDark, ov.totalTasks.toString(), 'Total Tasks')),
+          Expanded(
+              child: _buildStatCard(
+                  th, isDark, ov.totalTasks.toString(), 'Total Tasks')),
           const SizedBox(width: 8),
-          Expanded(child: _buildStatCard(th, isDark, ov.totalInProgress.toString(), 'In Progress')),
+          Expanded(
+              child: _buildStatCard(
+                  th, isDark, ov.totalInProgress.toString(), 'In Progress')),
           const SizedBox(width: 8),
-          Expanded(child: _buildStatCard(th, isDark, ov.totalCompleted.toString(), 'Completed')),
+          Expanded(
+              child: _buildStatCard(
+                  th, isDark, ov.totalCompleted.toString(), 'Completed')),
         ],
       );
     }
 
-    // Default stats for non-admin or if data failed
     final total = tp.tasks.length;
-    final completed = tp.tasks.where((t) => t.status.toLowerCase() == 'completed').length;
-    final active = tp.tasks.where((t) => t.status.toLowerCase() == 'in_progress').length;
+    final completed =
+        tp.tasks.where((t) => t.status.toLowerCase() == 'completed').length;
+    final active =
+        tp.tasks.where((t) => t.status.toLowerCase() == 'in_progress').length;
 
     return Row(
       children: [
-        Expanded(child: _buildStatCard(th, isDark, total.toString(), 'Your Tasks')),
+        Expanded(
+            child:
+            _buildStatCard(th, isDark, total.toString(), 'Your Tasks')),
         const SizedBox(width: 8),
-        Expanded(child: _buildStatCard(th, isDark, completed.toString(), 'Completed')),
+        Expanded(
+            child: _buildStatCard(
+                th, isDark, completed.toString(), 'Completed')),
         const SizedBox(width: 8),
-        Expanded(child: _buildStatCard(th, isDark, active.toString(), 'Active')),
+        Expanded(
+            child:
+            _buildStatCard(th, isDark, active.toString(), 'Active')),
       ],
     );
   }
 
-  Widget _buildStatCard(ThemeData th, bool isDark, String val, String label) {
+  Widget _buildStatCard(
+      ThemeData th, bool isDark, String val, String label) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
         color: isDark ? Colors.white.withAlpha(13) : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isDark ? Colors.white.withAlpha(25) : Colors.black.withAlpha(5)),
-        boxShadow: isDark ? null : [BoxShadow(color: Colors.black.withAlpha(5), blurRadius: 10, offset: const Offset(0, 4))],
+        border: Border.all(
+            color: isDark
+                ? Colors.white.withAlpha(25)
+                : Colors.black.withAlpha(5)),
+        boxShadow: isDark
+            ? null
+            : [
+          BoxShadow(
+              color: Colors.black.withAlpha(5),
+              blurRadius: 10,
+              offset: const Offset(0, 4))
+        ],
       ),
       child: Column(
         children: [
-          Text(val, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          Text(label, style: const TextStyle(fontSize: 9, color: Colors.grey)),
+          Text(val,
+              style: const TextStyle(
+                  fontSize: 24, fontWeight: FontWeight.bold)),
+          Text(label,
+              style: const TextStyle(fontSize: 9, color: Colors.grey)),
         ],
       ),
     );
   }
 
-  Widget _buildActiveSession(ThemeData th, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.white.withAlpha(13) : Colors.white,
-        borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: isDark ? Colors.white.withAlpha(30) : Colors.transparent),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Active Session', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const Icon(LucideIcons.moreHorizontal, color: Colors.grey, size: 18),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: InkWell(
-                  onTap: widget.onNavigateToBoard,
-                  borderRadius: BorderRadius.circular(24),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFCCEFED),
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Task title here', style: TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold)),
-                            Text('02:45:12', style: TextStyle(color: Colors.black, fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
-                          ],
-                        ),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: const BoxDecoration(color: Colors.black, shape: BoxShape.circle),
-                          child: const Icon(LucideIcons.play, color: Colors.white, size: 20),
-                        )
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              const Column(
-                children: [
-                  Icon(LucideIcons.layers, size: 20, color: Colors.grey),
-                  SizedBox(height: 12),
-                  Icon(LucideIcons.settings, size: 20, color: Colors.grey),
-                ],
-              )
-            ],
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWeeklySchedule(ThemeData th, bool isDark) {
-    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.white.withAlpha(13) : Colors.white,
-        borderRadius: BorderRadius.circular(32),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Weekly Schedule', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const Icon(LucideIcons.calendarDays, color: Colors.grey, size: 18),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: days.map((d) => _buildDayItem(d, d == 'Mon')).toList(),
-          ),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: th.colorScheme.primary.withAlpha(40),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: th.colorScheme.primary.withAlpha(50)),
-            ),
-            child: InkWell(
-              onTap: widget.onNavigateToBoard,
-              child: Row(
-                children: [
-                  const Icon(LucideIcons.briefcase, size: 18),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Homepage Redesign • Alex Developer', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                        Text('In Progress • HIGH', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                      ],
-                    ),
-                  ),
-                  Text('12:00', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: th.colorScheme.primary)),
-                ],
-              ),
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDayItem(String label, bool isToday) {
-    return Column(
-      children: [
-        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-        const SizedBox(height: 8),
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: isToday ? Colors.black : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Center(
-            child: Text(
-              '30', // Mock date
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: isToday ? Colors.white : Colors.grey,
-              ),
-            ),
-          ),
-        )
-      ],
-    );
-  }
-
-  Widget _buildTaskProgressList(ThemeData th, bool isDark, List<Task> tasks) {
+  Widget _buildTaskProgressList(
+      ThemeData th, bool isDark, List<Task> tasks) {
     if (tasks.isEmpty) return const SizedBox.shrink();
 
-    // Sort tasks: completed last, then by progress percent descending
-    final sortedTasks = List<Task>.from(tasks)..sort((a, b) {
-      if (a.status == 'completed' && b.status != 'completed') return 1;
-      if (b.status == 'completed' && a.status != 'completed') return -1;
-      return b.progressPercent.compareTo(a.progressPercent);
-    });
+    final sortedTasks = List<Task>.from(tasks)
+      ..sort((a, b) {
+        if (a.status == 'completed' && b.status != 'completed') return 1;
+        if (b.status == 'completed' && a.status != 'completed') return -1;
+        return b.progressPercent.compareTo(a.progressPercent);
+      });
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -580,22 +524,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Task Progress', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              Text('${tasks.length} tasks', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+              const Text('Task Progress',
+                  style:
+                  TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text('${tasks.length} tasks',
+                  style:
+                  const TextStyle(fontSize: 10, color: Colors.grey)),
             ],
           ),
           const SizedBox(height: 20),
           SizedBox(
-            height: 280, // Fixed height for scrollable area
+            height: 280,
             child: ListView.separated(
               shrinkWrap: true,
               itemCount: sortedTasks.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 16),
+              separatorBuilder: (context, index) =>
+              const SizedBox(height: 16),
               itemBuilder: (context, index) {
                 final t = sortedTasks[index];
                 final pct = t.progressPercent;
-                
-                // Color Logic from React
+
                 Color barColor = th.colorScheme.primary;
                 if (t.status == 'completed') {
                   barColor = Colors.green;
@@ -605,7 +553,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   barColor = Colors.amber;
                 }
 
-                // Priority Color
                 Color priorityColor = Colors.blue;
                 if (t.priority == 'urgent') {
                   priorityColor = Colors.red;
@@ -631,40 +578,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   child: Text(
                                     t.title,
                                     style: TextStyle(
-                                      fontSize: 12, 
+                                      fontSize: 12,
                                       fontWeight: FontWeight.bold,
-                                      decoration: t.status == 'completed' ? TextDecoration.lineThrough : null,
-                                      color: t.status == 'completed' ? Colors.grey : null,
+                                      decoration: t.status == 'completed'
+                                          ? TextDecoration.lineThrough
+                                          : null,
+                                      color: t.status == 'completed'
+                                          ? Colors.grey
+                                          : null,
                                     ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: priorityColor.withAlpha(40), // 15% in React is about 40 in alpha
+                                    color: priorityColor.withAlpha(40),
                                     borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: priorityColor.withAlpha(80)), // 30% is about 80 in alpha
+                                    border: Border.all(
+                                        color: priorityColor.withAlpha(80)),
                                   ),
                                   child: Text(
                                     t.priority.toUpperCase(),
-                                    style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: priorityColor),
+                                    style: TextStyle(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.bold,
+                                        color: priorityColor),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          Text('${t.progressPercent}%', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          Text('${t.progressPercent}%',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold)),
                         ],
                       ),
                       const SizedBox(height: 8),
-                      // Progress Bar
                       Container(
                         height: 6,
                         width: double.infinity,
                         decoration: BoxDecoration(
-                          color: isDark ? Colors.white.withAlpha(20) : Colors.black.withAlpha(10),
+                          color: isDark
+                              ? Colors.white.withAlpha(20)
+                              : Colors.black.withAlpha(10),
                           borderRadius: BorderRadius.circular(3),
                         ),
                         child: FractionallySizedBox(
@@ -684,14 +644,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         children: [
                           Text(
                             '${t.points.where((p) => p.isDone).length} of ${t.points.length} points',
-                            style: const TextStyle(fontSize: 9, color: Colors.grey),
+                            style: const TextStyle(
+                                fontSize: 9, color: Colors.grey),
                           ),
                           Text(
-                            t.status == 'completed' ? 'Done' : (t.isOverdue ? 'Overdue' : 'In progress'),
+                            t.status == 'completed'
+                                ? 'Done'
+                                : (t.isOverdue ? 'Overdue' : 'In progress'),
                             style: TextStyle(
-                              fontSize: 9, 
+                              fontSize: 9,
                               fontWeight: FontWeight.bold,
-                              color: t.status == 'completed' ? Colors.green : (t.isOverdue ? Colors.red : Colors.grey),
+                              color: t.status == 'completed'
+                                  ? Colors.green
+                                  : (t.isOverdue ? Colors.red : Colors.grey),
                             ),
                           ),
                         ],
@@ -707,11 +672,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildWorkActivityHeatmap(ThemeData th, bool isDark, List<Task> tasks) {
-    // 49 days (7 weeks) logic matching React
+  Widget _buildWorkActivityHeatmap(
+      ThemeData th, bool isDark, List<Task> tasks) {
     final Map<String, int> dailyActivity = {};
     for (var task in tasks) {
-      // Use startDate or updatedAt since createdAt is not in the model
       final date = task.startDate ?? task.updatedAt;
       final dayStr = DateFormat('yyyy-MM-dd').format(date);
       dailyActivity[dayStr] = (dailyActivity[dayStr] ?? 0) + 1;
@@ -719,7 +683,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final today = DateTime.now();
     final todayTruncated = DateTime(today.year, today.month, today.day);
-    // 49 days history
     final startDate = todayTruncated.subtract(const Duration(days: 48));
 
     return Container(
@@ -727,7 +690,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       decoration: BoxDecoration(
         color: isDark ? Colors.white.withAlpha(13) : Colors.white,
         borderRadius: BorderRadius.circular(32),
-        boxShadow: isDark ? null : [BoxShadow(color: Colors.black.withAlpha(5), blurRadius: 20, offset: const Offset(0, 10))],
+        boxShadow: isDark
+            ? null
+            : [
+          BoxShadow(
+              color: Colors.black.withAlpha(5),
+              blurRadius: 20,
+              offset: const Offset(0, 10))
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -735,80 +705,103 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Work Activity', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text('Work Activity',
+                  style:
+                  TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.black12, borderRadius: BorderRadius.circular(12)),
-                child: const Text('Last 7 Weeks', style: TextStyle(fontSize: 10, fontFamily: 'monospace')),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                    color: isDark ? Colors.white10 : Colors.black12,
+                    borderRadius: BorderRadius.circular(12)),
+                child: const Text('Last 7 Weeks',
+                    style: TextStyle(
+                        fontSize: 10, fontFamily: 'monospace')),
               )
             ],
           ),
           const SizedBox(height: 20),
-          
-          LayoutBuilder(
-            builder: (context, constraints) {
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(7, (weekIdx) {
-                  return Column(
-                    children: List.generate(7, (dayIdx) {
-                      final dayInTotal = (weekIdx * 7) + dayIdx;
-                      final date = startDate.add(Duration(days: dayInTotal));
-                      final dateStr = DateFormat('yyyy-MM-dd').format(date);
-                      final count = dailyActivity[dateStr] ?? 0;
-                      
-                      Color color;
-                      if (count == 0) color = isDark ? Colors.white.withAlpha(15) : Colors.black.withAlpha(5);
-                      else if (count < 3) color = th.colorScheme.primary.withAlpha(60);
-                      else if (count < 6) color = th.colorScheme.primary.withAlpha(140);
-                      else if (count < 10) color = th.colorScheme.primary.withAlpha(200);
-                      else color = th.colorScheme.primary;
+          LayoutBuilder(builder: (context, constraints) {
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: List.generate(7, (weekIdx) {
+                return Column(
+                  children: List.generate(7, (dayIdx) {
+                    final dayInTotal = (weekIdx * 7) + dayIdx;
+                    final date =
+                    startDate.add(Duration(days: dayInTotal));
+                    final dateStr =
+                    DateFormat('yyyy-MM-dd').format(date);
+                    final count = dailyActivity[dateStr] ?? 0;
 
-                      return GestureDetector(
-                        onTap: () {
-                          final label = count > 0 ? '$count task${count > 1 ? 's' : ''}' : 'No activity';
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('$label on ${DateFormat('MMM dd').format(date)}', 
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
-                              backgroundColor: th.colorScheme.primary,
-                              duration: const Duration(seconds: 1),
-                              behavior: SnackBarBehavior.floating,
-                              margin: const EdgeInsets.all(20),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                          );
-                        },
-                        child: Container(
-                          width: (constraints.maxWidth - 40) / 7,
-                          height: (constraints.maxWidth - 40) / 7,
-                          margin: const EdgeInsets.only(bottom: 4),
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
+                    Color color;
+                    if (count == 0)
+                      color = isDark
+                          ? Colors.white.withAlpha(15)
+                          : Colors.black.withAlpha(5);
+                    else if (count < 3)
+                      color = th.colorScheme.primary.withAlpha(60);
+                    else if (count < 6)
+                      color = th.colorScheme.primary.withAlpha(140);
+                    else if (count < 10)
+                      color = th.colorScheme.primary.withAlpha(200);
+                    else
+                      color = th.colorScheme.primary;
+
+                    return GestureDetector(
+                      onTap: () {
+                        final label = count > 0
+                            ? '$count task${count > 1 ? 's' : ''}'
+                            : 'No activity';
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                                '$label on ${DateFormat('MMM dd').format(date)}',
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black)),
+                            backgroundColor: th.colorScheme.primary,
+                            duration: const Duration(seconds: 1),
+                            behavior: SnackBarBehavior.floating,
+                            margin: const EdgeInsets.all(20),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
                           ),
+                        );
+                      },
+                      child: Container(
+                        width: (constraints.maxWidth - 40) / 7,
+                        height: (constraints.maxWidth - 40) / 7,
+                        margin: const EdgeInsets.only(bottom: 4),
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
                         ),
-                      );
-                    }),
-                  );
-                }),
-              );
-            }
-          ),
+                      ),
+                    );
+                  }),
+                );
+              }),
+            );
+          }),
           const SizedBox(height: 16),
-          // Legend
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              const Text('Less', style: TextStyle(fontSize: 9, color: Colors.grey)),
+              const Text('Less',
+                  style: TextStyle(fontSize: 9, color: Colors.grey)),
               const SizedBox(width: 4),
-              _buildLegendBox(isDark ? Colors.white.withAlpha(15) : Colors.black.withAlpha(5)),
+              _buildLegendBox(isDark
+                  ? Colors.white.withAlpha(15)
+                  : Colors.black.withAlpha(5)),
               _buildLegendBox(th.colorScheme.primary.withAlpha(60)),
               _buildLegendBox(th.colorScheme.primary.withAlpha(140)),
               _buildLegendBox(th.colorScheme.primary.withAlpha(200)),
               _buildLegendBox(th.colorScheme.primary),
               const SizedBox(width: 4),
-              const Text('More', style: TextStyle(fontSize: 9, color: Colors.grey)),
+              const Text('More',
+                  style: TextStyle(fontSize: 9, color: Colors.grey)),
             ],
           )
         ],
@@ -821,11 +814,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       width: 10,
       height: 10,
       margin: const EdgeInsets.symmetric(horizontal: 2),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
+      decoration: BoxDecoration(
+          color: color, borderRadius: BorderRadius.circular(2)),
     );
   }
 
-  Widget _buildRecentTasks(ThemeData th, bool isDark, List<Task> tasks) {
+  Widget _buildRecentTasks(
+      ThemeData th, bool isDark, List<Task> tasks) {
     final recent = tasks.take(5).toList();
     if (recent.isEmpty) return const SizedBox.shrink();
 
@@ -841,25 +836,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Recent Tasks', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text('Recent Tasks',
+                  style:
+                  TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.black12, borderRadius: BorderRadius.circular(10)),
-                child: Text(recent.length.toString(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                    color: isDark ? Colors.white10 : Colors.black12,
+                    borderRadius: BorderRadius.circular(10)),
+                child: Text(recent.length.toString(),
+                    style: const TextStyle(
+                        fontSize: 10, fontWeight: FontWeight.bold)),
               )
             ],
           ),
           const SizedBox(height: 20),
-          ...recent.expand((t) => [
-            _buildTaskItem(t.title, '', t.status, t.id.toString()),
+          ...recent
+              .expand((t) => [
+            _buildTaskItem(
+                t.title, '', t.status, t.id.toString()),
             _buildDivider(),
-          ]).toList()..removeLast(),
+          ])
+              .toList()
+            ..removeLast(),
         ],
       ),
     );
   }
 
-  Widget _buildTaskItem(String title, String devName, String status, String id) {
+  Widget _buildTaskItem(
+      String title, String devName, String status, String id) {
     return InkWell(
       onTap: widget.onNavigateToBoard,
       child: Padding(
@@ -874,9 +881,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                status == 'completed' ? LucideIcons.checkCircle2 : LucideIcons.clock,
+                status == 'completed'
+                    ? LucideIcons.checkCircle2
+                    : LucideIcons.clock,
                 size: 16,
-                color: status == 'completed' ? Colors.green : Colors.grey,
+                color:
+                status == 'completed' ? Colors.green : Colors.grey,
               ),
             ),
             const SizedBox(width: 12),
@@ -884,12 +894,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('$title • $devName', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  Text(status.toUpperCase().replaceAll('_', ' '), style: const TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                  Text('$title • $devName',
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  Text(
+                      status
+                          .toUpperCase()
+                          .replaceAll('_', ' '),
+                      style: const TextStyle(
+                          fontSize: 9,
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5)),
                 ],
               ),
             ),
-            Text('#$id', style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
+            Text('#$id',
+                style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.bold)),
           ],
         ),
       ),

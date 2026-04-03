@@ -146,5 +146,20 @@ class SocketService {
   void stopListeningForNewChatMessage() {
     _socket?.off('task:new_message');
   }
+
+  /// Listen for session termination (admin kill).
+  void listenForSessionTerminated(void Function(Map<String, dynamic> payload) onTerminated) {
+    _socket?.on('session:terminated', (data) {
+      if (data is Map<String, dynamic>) {
+        onTerminated(data);
+      } else if (data is Map) {
+        onTerminated(Map<String, dynamic>.from(data));
+      }
+    });
+  }
+
+  void stopListeningForSessionTerminated() {
+    _socket?.off('session:terminated');
+  }
 }
 
