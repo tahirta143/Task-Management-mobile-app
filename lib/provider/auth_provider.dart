@@ -153,6 +153,92 @@ class AuthProvider extends ChangeNotifier {
     }
   }
   
+  Future<void> changePassword(String newPassword) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    
+    try {
+      if (_user == null) throw ApiException('User not authenticated');
+
+      await ApiClient().patch(
+        '/api/users/me/password',
+        body: {'password': newPassword}
+      );
+      
+      _isLoading = false;
+      notifyListeners();
+    } on ApiException catch (e) {
+      _error = e.message;
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Failed to change password';
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> updateProfile({String? username, String? email}) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      if (_user == null) throw ApiException('User not authenticated');
+
+      final payload = <String, dynamic>{};
+      final currentUsername = _user!['username']?.toString() ?? '';
+      final currentEmail = _user!['email']?.toString() ?? '';
+
+      if (username != null && username.trim().isNotEmpty && username.trim() != currentUsername) {
+        payload['username'] = username.trim();
+      }
+      if (email != null && email.trim().isNotEmpty && email.trim() != currentEmail) {
+        payload['email'] = email.trim();
+      }
+
+      if (payload.isEmpty) {
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      final response = await ApiClient().patch(
+        '/api/users/me',
+        body: payload,
+      );
+
+      // response['item'] contains the updated user
+      if (response != null && response['item'] != null) {
+        final userData = Map<String, dynamic>.from(response['item']);
+        // Normalize role if present
+        if (userData['role'] != null) {
+          userData['role'] = userData['role'].toString().toLowerCase();
+        }
+        _user = userData;
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('tm_user', json.encode(_user));
+      }
+
+      _isLoading = false;
+      notifyListeners();
+    } on ApiException catch (e) {
+      _error = e.message;
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Failed to update profile';
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+  
   void clearError() {
     if (_error != null) {
       _error = null;

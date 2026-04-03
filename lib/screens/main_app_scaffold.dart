@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -154,6 +155,215 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
       _adminTitle = title;
       _notifPanelOpen = false;
     });
+  }
+
+  void _showProfileSettingsDialog() {
+    final auth = context.read<AuthProvider>();
+    final TextEditingController usernameController =
+        TextEditingController(text: auth.user?['username'] ?? '');
+    final TextEditingController emailController =
+        TextEditingController(text: auth.user?['email'] ?? '');
+    final TextEditingController passwordController = TextEditingController();
+    
+    final th = Theme.of(context);
+    final isDark = th.brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+        child: StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: th.scaffoldBackgroundColor,
+              surfaceTintColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(28)),
+              title: const Row(
+                children: [
+                  Icon(LucideIcons.user, size: 24),
+                  SizedBox(width: 12),
+                  Text('Profile Settings',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // const Text(
+                    //   'Update your account information. Fields left unchanged will remain the same.',
+                    //   style: TextStyle(fontSize: 12, color: Colors.grey),
+                    // ),
+                    const SizedBox(height: 20),
+                    _buildPopupField(
+                      controller: usernameController,
+                      label: 'Username',
+                      icon: LucideIcons.user,
+                      isDark: isDark,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildPopupField(
+                      controller: emailController,
+                      label: 'Email',
+                      icon: LucideIcons.mail,
+                      isDark: isDark,
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 16),
+                    // const Divider(),
+                    // const SizedBox(height: 16),
+                    // const Text(
+                    //   'SECURITY',
+                    //   style: TextStyle(
+                    //     fontSize: 10,
+                    //     fontWeight: FontWeight.bold,
+                    //     color: Colors.grey,
+                    //     letterSpacing: 1.2,
+                    //   ),
+                    // ),
+                    // const SizedBox(height: 12),
+                    _buildPopupField(
+                      controller: passwordController,
+                      label: 'New Password',
+                      hint: 'Leave blank to keep current',
+                      icon: LucideIcons.lock,
+                      isDark: isDark,
+                      isPassword: true,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('Cancel',
+                      style: TextStyle(
+                          color: isDark ? Colors.white70 : Colors.black54)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: th.colorScheme.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 12),
+                  ),
+                  onPressed: () async {
+                    final username = usernameController.text.trim();
+                    final email = emailController.text.trim();
+                    final newPass = passwordController.text.trim();
+
+                    if (username.isEmpty && email.isEmpty && newPass.isEmpty) {
+                      Navigator.pop(ctx);
+                      return;
+                    }
+
+                    try {
+                      // 1. Update Profile (Username/Email)
+                      if (username != (auth.user?['username'] ?? '') ||
+                          email != (auth.user?['email'] ?? '')) {
+                        await auth.updateProfile(username: username, email: email);
+                      }
+
+                      // 2. Update Password if provided
+                      bool passwordChanged = false;
+                      if (newPass.isNotEmpty) {
+                        await auth.changePassword(newPass);
+                        passwordChanged = true;
+                      }
+
+                      if (mounted) {
+                        Navigator.pop(ctx);
+                        if (passwordChanged) {
+                          // Auto logout after password change
+                          await auth.logout();
+                          if (mounted) {
+                            Navigator.of(context).pushReplacementNamed('/');
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Password changed. Please login again.'),
+                                backgroundColor: Colors.orangeAccent,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Profile updated successfully'),
+                              backgroundColor: Colors.green,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Update failed: $e'),
+                            backgroundColor: Colors.redAccent,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('Save Changes',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPopupField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    required bool isDark,
+    String? hint,
+    bool isPassword = false,
+    TextInputType? keyboardType,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          obscureText: isPassword,
+          keyboardType: keyboardType,
+          style: const TextStyle(fontSize: 14),
+          decoration: InputDecoration(
+            hintText: hint,
+            prefixIcon: Icon(icon, size: 18),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
+            ),
+            filled: true,
+            fillColor: isDark
+                ? Colors.white.withOpacity(0.05)
+                : Colors.black.withOpacity(0.04),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -500,74 +710,77 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                 ],
               ),
             ),
-            // Bottom Profile Section
             Padding(
               padding: const EdgeInsets.all(16.0),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withOpacity(0.05)
-                      : Colors.black.withOpacity(0.03),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
+              child: GestureDetector(
+                onTap: _showProfileSettingsDialog,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
                     color: isDark
-                        ? Colors.white.withOpacity(0.1)
-                        : Colors.black.withOpacity(0.05),
+                        ? Colors.white.withOpacity(0.05)
+                        : Colors.black.withOpacity(0.03),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withOpacity(0.1)
+                          : Colors.black.withOpacity(0.05),
+                    ),
                   ),
-                ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      backgroundColor:
-                          isDark ? Colors.white24 : Colors.black12,
-                      child: Text(
-                        (context
-                                    .read<AuthProvider>()
-                                    .user?['username'] ??
-                                'U')
-                            .substring(0, 1)
-                            .toUpperCase(),
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 12),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor:
+                            isDark ? Colors.white24 : Colors.black12,
+                        child: Text(
+                          (context
+                                      .read<AuthProvider>()
+                                      .user?['username'] ??
+                                  'U')
+                              .substring(0, 1)
+                              .toUpperCase(),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            (context
-                                        .read<AuthProvider>()
-                                        .user?['role'] ??
-                                    'USER')
-                                .toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              color: isDark
-                                  ? Colors.white54
-                                  : Colors.black54,
-                              letterSpacing: 1.0,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              (context
+                                          .read<AuthProvider>()
+                                          .user?['role'] ??
+                                      'USER')
+                                  .toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? Colors.white54
+                                    : Colors.black54,
+                                letterSpacing: 1.0,
+                              ),
                             ),
-                          ),
-                          Text(
-                            context
-                                    .read<AuthProvider>()
-                                    .user?['username'] ??
-                                'Current User',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
+                            Text(
+                              context
+                                      .read<AuthProvider>()
+                                      .user?['username'] ??
+                                  'Current User',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
