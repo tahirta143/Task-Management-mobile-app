@@ -14,6 +14,8 @@ import 'services/local_notification_service.dart';
 import 'services/workmanager_service.dart';
 import 'screens/splash_screen.dart';
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -54,6 +56,7 @@ class TaskManagerApp extends StatelessWidget {
         builder: (context, themeProvider, _) {
           return MaterialApp(
             title: 'Task Management OS',
+            navigatorKey: navigatorKey,
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,

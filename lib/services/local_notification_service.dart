@@ -1,4 +1,9 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/material.dart';
+import 'dart:convert';
+import '../main.dart';
+import '../screens/chat_screen/chat_detail_screen.dart';
+import '../screens/board_screen/task_detail_screen.dart';
 
 /// Singleton service for showing OS-level system tray notifications.
 /// Works even when the app is backgrounded / screen is locked.
@@ -47,7 +52,14 @@ class LocalNotificationService {
     const InitializationSettings initSettings =
         InitializationSettings(android: androidSettings);
 
-    await _plugin.initialize(initSettings);
+    await _plugin.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: (NotificationResponse response) {
+        if (response.payload != null) {
+          _onNotificationTap(response.payload!);
+        }
+      },
+    );
 
     // Request permission on Android 13+
     // Note: We don't await this if we're in background as it's a UI action
@@ -59,19 +71,54 @@ class LocalNotificationService {
     _initialized = true;
   }
 
+  // ─── Click Handler ────────────────────────────────────────────────────────
+
+  void _onNotificationTap(String payload) {
+    try {
+      final Map<String, dynamic> data = jsonDecode(payload);
+      final taskId = data['taskId'];
+      final type = data['type'];
+
+      if (taskId == null) return;
+
+      final context = navigatorKey.currentContext;
+      if (context == null) return;
+
+      if (type == 'chat') {
+        navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (_) => ChatDetailScreen(
+              taskId: taskId is int ? taskId : int.parse(taskId.toString()),
+              taskTitle: data['taskTitle'] ?? 'Chat',
+            ),
+          ),
+        );
+      } else if (type == 'task') {
+        navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (_) => TaskDetailScreen(
+              taskId: taskId is int ? taskId : int.parse(taskId.toString()),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error handling notification tap: $e');
+    }
+  }
+
   // ─── Show notification ────────────────────────────────────────────────────
 
-  /// Shows a system tray notification immediately.
-  /// [id] should be unique per notification source to avoid collisions.
   Future<void> show({
     required int id,
     required String title,
     required String body,
+    String? payload,
   }) async {
     if (!_initialized) {
       await initialize();
     }
-    await _plugin.show(id, title, body, _notificationDetails);
+    await _plugin.show(id, title, body, _notificationDetails, payload: payload);
   }
 
   /// Convenience method for new chat messages.
@@ -79,13 +126,19 @@ class LocalNotificationService {
     required int taskId,
     required String senderName,
     required String message,
+    String? taskTitle,
   }) async {
+    final payload = jsonEncode({
+      'type': 'chat',
+      'taskId': taskId,
+      'taskTitle': taskTitle ?? 'Chat Room',
+    });
+    
     await show(
-      // Use taskId as notification ID so messages in the same task
-      // update/replace the previous notification instead of stacking.
       id: taskId,
       title: senderName,
       body: message,
+      payload: payload,
     );
   }
 
@@ -94,10 +147,17 @@ class LocalNotificationService {
     required int taskId,
     required String taskTitle,
   }) async {
+    final payload = jsonEncode({
+      'type': 'task',
+      'taskId': taskId,
+      'taskTitle': taskTitle,
+    });
+
     await show(
       id: 1000000 + taskId, // offset to avoid collision with chat IDs
       title: 'New Task Assigned',
       body: 'You have been assigned: $taskTitle',
+      payload: payload,
     );
   }
 

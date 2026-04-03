@@ -377,8 +377,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Default stats for non-admin or if data failed
     final total = tp.tasks.length;
-    final completed = tp.tasks.where((t) => t.status == 'completed').length;
-    final active = tp.tasks.where((t) => t.status == 'in_progress').length;
+    final completed = tp.tasks.where((t) => t.status.toLowerCase() == 'completed').length;
+    final active = tp.tasks.where((t) => t.status.toLowerCase() == 'in_progress').length;
 
     return Row(
       children: [

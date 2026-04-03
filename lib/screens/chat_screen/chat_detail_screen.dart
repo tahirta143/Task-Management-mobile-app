@@ -54,7 +54,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         if (mounted && !_messages.any((m) => m.id == newMsg.id)) {
           setState(() => _messages.add(newMsg));
           _scrollToBottom();
-          // Mark as read when receiving in-room
           context.read<TaskProvider>().markTaskAsRead(widget.taskId);
         }
       }
@@ -62,9 +61,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
     ss.socket.on('typing', (data) {
       if (data['taskId'] == widget.taskId) {
-        final userId = data['userId'];
-        if (userId != me?['id']) {
-          setState(() => _typingUsers[userId] = data['isTyping']);
+        final userId = data['userId']?.toString();
+        if (userId != me?['id']?.toString()) {
+          setState(() => _typingUsers[int.parse(userId!)] = data['isTyping']);
         }
       }
     });
@@ -106,7 +105,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     final me = authProvider.user;
     if (me == null) return;
 
-    // Optimistic Update
     final optimistic = Message(
       id: 'tmp-${DateTime.now().millisecondsSinceEpoch}',
       taskId: widget.taskId,
@@ -123,20 +121,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
 
     setState(() {
-      if (!_messages.any((m) => m.id == optimistic.id)) {
-        _messages.add(optimistic);
-      }
+      _messages.add(optimistic);
       _scrollToBottom();
     });
 
     final replyToId = _replyingTo?.id != null ? int.tryParse(_replyingTo!.id) : null;
-    
     final ss = SocketService();
     ss.sendMessage(widget.taskId, text, replyToId: replyToId, onAck: (ack) {
       if (mounted) {
-        setState(() {
-          _messages.removeWhere((m) => m.id == optimistic.id);
-        });
+        setState(() => _messages.removeWhere((m) => m.id == optimistic.id));
       }
     });
     
@@ -154,12 +147,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     final me = authProvider.user;
     if (me == null) return;
 
-    // Optimistic Update with local file path
     final optimistic = Message(
       id: 'tmp-img-${DateTime.now().millisecondsSinceEpoch}',
       taskId: widget.taskId,
       type: 'image',
-      imageUrl: image.path, // Use local path for immediate display
+      imageUrl: image.path,
       senderId: me['id'],
       sender: User.fromJson(me),
       replyInfo: _replyingTo != null ? {
@@ -176,12 +168,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     });
 
     final replyToId = _replyingTo?.id != null ? int.tryParse(_replyingTo!.id) : null;
-    final tp = context.read<TaskProvider>();
-    
     try {
-      final msg = await tp.uploadTaskImage(widget.taskId, File(image.path));
-      final ss = SocketService();
-      ss.sendImage(widget.taskId, msg.imageUrl!, replyToId: replyToId, onAck: (ack) {
+      final msg = await context.read<TaskProvider>().uploadTaskImage(widget.taskId, File(image.path));
+      SocketService().sendImage(widget.taskId, msg.imageUrl!, replyToId: replyToId, onAck: (ack) {
         if (mounted) {
           setState(() {
             _replyingTo = null;
@@ -191,10 +180,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       });
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _messages.removeWhere((m) => m.id == optimistic.id);
-        });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to upload image: $e')));
+        setState(() => _messages.removeWhere((m) => m.id == optimistic.id));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
       }
     }
   }
@@ -209,242 +196,124 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final th = Theme.of(context);
-    final isDark = th.brightness == Brightness.dark;
-    final me = context.watch<AuthProvider>().user;
-
-    final mq = MediaQuery.of(context);
-    final bottomInset = mq.viewInsets.bottom;
-    final bottomPadding = mq.padding.bottom;
-
-    return Scaffold(
-      resizeToAvoidBottomInset: true,
-      appBar: AppBar(
-        titleSpacing: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Room', style: TextStyle(fontSize: 10, color: Colors.grey)),
-            Text(widget.taskTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          ],
-        ),
-        actions: [
-          IconButton(onPressed: () {}, icon: const Icon(LucideIcons.moreVertical, size: 20)),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Checklist / Points - Only points are scrollable
-          ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: bottomInset > 0 ? 200.0 : 240.0,
-            ),
-            child: _buildChecklistHeader(isDark),
-          ),
-
-          // Messages List
-          Expanded(
-            child: _isLoadingMessages 
-              ? const CustomLoader()
-              : RefreshIndicator(
-                  onRefresh: () async {
-                    _messages.clear();
-                    _loadMessages();
-                  },
-                  child: ListView.builder(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) {
-                      final msg = _messages[index];
-                      final isMine = msg.senderId == me?['id'];
-                      return _buildMessageBubble(msg, isMine);
-                    },
-                  ),
-                ),
-          ),
-
-          if (_typingUsers.values.any((e) => e))
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Row(
-                children: [
-                  const CustomLoader(size: 12),
-                  const SizedBox(width: 8),
-                  Text('Someone is typing...', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-                ],
-              ),
-            ),
-
-          // Input Area
-          _buildInput(th, isDark, bottomInset, bottomPadding),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChecklistHeader(bool isDark) {
-    return Consumer<TaskProvider>(
-      builder: (context, tp, child) {
-        final currentTask = tp.tasks.firstWhere((t) => t.id == widget.taskId, orElse: () => throw 'Task not found');
-        if (currentTask.points.isEmpty) return const SizedBox.shrink();
-
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          decoration: BoxDecoration(
-            color: isDark ? Colors.white.withAlpha(10) : Colors.black.withAlpha(5),
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Checklist', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
-                  Text('${currentTask.points.where((p) => p.isDone).length}/${currentTask.points.length} done', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: currentTask.points.isEmpty ? 0 : currentTask.points.where((p) => p.isDone).length / currentTask.points.length,
-                  minHeight: 6,
-                  backgroundColor: isDark ? Colors.white.withAlpha(10) : Colors.black.withAlpha(10),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: currentTask.points.map((p) => Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: InkWell(
-                        onTap: () async {
-                          await tp.togglePoint(currentTask.id, p.id, !p.isDone);
-                        },
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                          child: Row(
-                            children: [
-                              Icon(p.isDone ? LucideIcons.checkCircle : LucideIcons.circle, size: 18, color: p.isDone ? Colors.green : Colors.grey),
-                              const SizedBox(width: 12),
-                              Expanded(child: Text(p.label, style: TextStyle(fontSize: 13, decoration: p.isDone ? TextDecoration.lineThrough : null, color: p.isDone ? Colors.grey : null))),
-                            ],
-                          ),
-                        ),
-                      ),
-                    )).toList(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildMessageBubble(Message msg, bool isMine) {
     final th = Theme.of(context);
     final isDark = th.brightness == Brightness.dark;
-    final dateStr = DateFormat('dd/MM/yyyy HH:mm').format(msg.createdAt);
+    final dateStr = DateFormat('hh:mm a').format(msg.createdAt.toLocal());
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (!isMine) ...[
-            _buildAvatar(msg.sender),
-            const SizedBox(width: 8),
-          ],
-          Flexible(
-            child: Column(
-              crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-              children: [
-                if (!isMine)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4, bottom: 4),
-                    child: Text(msg.sender?.username ?? 'User',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey)),
-                  ),
-                GestureDetector(
-                  onLongPress: () => setState(() => _replyingTo = msg),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: isMine
-                          ? th.colorScheme.primary.withAlpha(isDark ? 40 : 20)
-                          : (isDark ? Colors.white.withAlpha(10) : Colors.grey[100]),
-                      borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(24),
-                        topRight: const Radius.circular(24),
-                        bottomLeft: Radius.circular(isMine ? 24 : 4),
-                        bottomRight: Radius.circular(isMine ? 4 : 24),
+    return Dismissible(
+      key: Key('chat-reply-${msg.id}'),
+      direction: DismissDirection.startToEnd,
+      confirmDismiss: (dir) async {
+        setState(() => _replyingTo = msg);
+        return false;
+      },
+      background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 20),
+        child: Icon(LucideIcons.reply, size: 20, color: th.colorScheme.primary),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Row(
+          mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (!isMine) ...[
+              _buildAvatar(msg.sender),
+              const SizedBox(width: 8),
+            ],
+            Flexible(
+              flex: 3,
+              child: Column(
+                crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  if (!isMine)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8, bottom: 4),
+                      child: Text(msg.sender?.username ?? 'User',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey)),
+                    ),
+                  GestureDetector(
+                    onLongPress: () => setState(() => _replyingTo = msg),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: isMine
+                            ? th.colorScheme.primary.withAlpha(isDark ? 50 : 30)
+                            : (isDark ? Colors.white.withAlpha(15) : Colors.grey[200]),
+                        borderRadius: BorderRadius.only(
+                          topLeft: const Radius.circular(20),
+                          topRight: const Radius.circular(20),
+                          bottomLeft: Radius.circular(isMine ? 20 : 4),
+                          bottomRight: Radius.circular(isMine ? 4 : 20),
+                        ),
+                        border: Border.all(
+                          color: isMine 
+                              ? th.colorScheme.primary.withAlpha(60) 
+                              : (isDark ? Colors.white.withAlpha(20) : Colors.black.withAlpha(8)),
+                        ),
                       ),
-                      border: Border.all(
-                        color: isMine 
-                            ? th.colorScheme.primary.withAlpha(50) 
-                            : (isDark ? Colors.white.withAlpha(10) : Colors.black.withAlpha(5)),
+                      child: Column(
+                        crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (msg.replyInfo != null)
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              margin: const EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withAlpha(10),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border(
+                                  left: !isMine ? const BorderSide(color: Colors.grey, width: 3) : BorderSide.none,
+                                  right: isMine ? const BorderSide(color: Colors.grey, width: 3) : BorderSide.none,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Replied to ${msg.replyInfo!['username'] ?? 'User'}',
+                                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: th.colorScheme.primary),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    msg.replyInfo!['content'] ?? (msg.replyInfo!['type'] == 'image' ? 'Image attachment' : ''),
+                                    style: const TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (msg.type == 'image' && msg.imageUrl != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: msg.imageUrl!.startsWith('http')
+                                    ? Image.network(msg.imageUrl!, fit: BoxFit.cover)
+                                    : Image.file(File(msg.imageUrl!), fit: BoxFit.cover),
+                              ),
+                            ),
+                          Text(msg.content ?? '', style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
+                          const SizedBox(height: 4),
+                          Text(dateStr, style: TextStyle(fontSize: 9, color: Colors.grey[600])),
+                        ],
                       ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (msg.replyInfo != null)
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            margin: const EdgeInsets.only(bottom: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withAlpha(10),
-                              borderRadius: BorderRadius.circular(12),
-                              border: const Border(left: BorderSide(color: Colors.grey, width: 3)),
-                            ),
-                            child: Text(
-                              msg.replyInfo!['content'] ?? (msg.replyInfo!['type'] == 'image' ? 'Image' : ''),
-                              style: const TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        if (msg.type == 'image' && msg.imageUrl != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: msg.imageUrl!.startsWith('http')
-                                  ? Image.network(msg.imageUrl!, fit: BoxFit.cover)
-                                  : (msg.id.startsWith('tmp')
-                                      ? Image.file(File(msg.imageUrl!), fit: BoxFit.cover)
-                                      : Image.network('${SocketService().baseUrl}${msg.imageUrl}', fit: BoxFit.cover)),
-                            ),
-                          ),
-                        if (msg.content != null)
-                          Text(msg.content!, style: const TextStyle(fontSize: 14, height: 1.4)),
-                        const SizedBox(height: 6),
-                        Text(dateStr, style: TextStyle(fontSize: 10, color: Colors.grey[500])),
-                      ],
-                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          if (isMine) ...[
-            const SizedBox(width: 8),
-            _buildAvatar(msg.sender),
+            if (isMine) ...[
+              const SizedBox(width: 8),
+              _buildAvatar(msg.sender),
+            ],
+            if (!isMine) const Spacer(flex: 1),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -475,10 +344,74 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 
-  Widget _buildInput(ThemeData th, bool isDark, double bottomInset, double bottomSafePadding) {
-    // When keyboard is open, we use a smaller padding, otherwise use safe area padding
-    double effectiveBottomPadding = bottomInset > 0 ? 8.0 : 16.0 + bottomSafePadding;
-    
+  @override
+  Widget build(BuildContext context) {
+    final th = Theme.of(context);
+    final isDark = th.brightness == Brightness.dark;
+    final me = context.watch<AuthProvider>().user;
+    final mq = MediaQuery.of(context);
+    final bottomInset = mq.viewInsets.bottom;
+    final bottomPadding = mq.padding.bottom;
+
+    return Scaffold(
+      resizeToAvoidBottomInset: true,
+      appBar: AppBar(
+        titleSpacing: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Room', style: TextStyle(fontSize: 10, color: Colors.grey)),
+            Text(widget.taskTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        actions: [
+          IconButton(onPressed: () {}, icon: const Icon(LucideIcons.moreVertical, size: 20)),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Checklist header logic can be added here if needed, 
+          // usually standard chat screens don't have it but we'll stick to the previous layout
+          Expanded(
+            child: _isLoadingMessages 
+                ? const Center(child: CustomLoader()) 
+                : RefreshIndicator(
+                    onRefresh: () async {
+                      _loadMessages();
+                    },
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _messages.length,
+                      itemBuilder: (context, index) {
+                        final msg = _messages[index];
+                        final isMine = msg.senderId?.toString() == me?['id']?.toString();
+                        return _buildMessageBubble(msg, isMine);
+                      },
+                    ),
+                  ),
+          ),
+          if (_typingUsers.values.any((e) => e))
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: [
+                  const CustomLoader(size: 12),
+                  const SizedBox(width: 8),
+                  Text('Someone is typing...', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                ],
+              ),
+            ),
+          _buildInput(th, isDark, bottomInset, bottomPadding),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInput(ThemeData th, bool isDark, double bottomInset, double bottomPadding) {
+    double effectiveBottomPadding = bottomInset > 0 ? 8.0 : 16.0 + bottomPadding;
+
     return Container(
       padding: EdgeInsets.fromLTRB(16, 8, 16, effectiveBottomPadding),
       decoration: BoxDecoration(
@@ -499,7 +432,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                 children: [
                   const Icon(LucideIcons.reply, size: 16, color: Colors.grey),
                   const SizedBox(width: 12),
-                  Expanded(child: Text(_replyingTo!.content ?? 'Image attachment', style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  Expanded(child: Text(_replyingTo!.content ?? (_replyingTo!.type == 'image' ? 'Image attachment' : ''), style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis)),
                   IconButton(onPressed: () => setState(() => _replyingTo = null), icon: const Icon(LucideIcons.x, size: 16)),
                 ],
               ),

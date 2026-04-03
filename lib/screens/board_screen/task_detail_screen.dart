@@ -13,8 +13,10 @@ import '../../services/socket_service.dart';
 import '../../widgets/custom_loader.dart';
 
 class TaskDetailScreen extends StatefulWidget {
-  final Task task;
-  const TaskDetailScreen({super.key, required this.task});
+  final Task? task;
+  final int? taskId;
+  const TaskDetailScreen({super.key, this.task, this.taskId})
+      : assert(task != null || taskId != null, 'Either task or taskId must be provided');
 
   @override
   State<TaskDetailScreen> createState() => _TaskDetailScreenState();
@@ -25,14 +27,43 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<Message> _messages = [];
   bool _isLoadingMessages = true;
+  bool _isLoadingTask = false;
+  Task? _task;
   final Map<int, bool> _typingUsers = {};
   Message? _replyingTo;
 
   @override
   void initState() {
     super.initState();
-    _loadMessages();
-    _initSocket();
+    _task = widget.task;
+    if (_task == null && widget.taskId != null) {
+      _loadTask();
+    } else {
+      _loadMessages();
+      _initSocket();
+    }
+  }
+
+  void _loadTask() async {
+    setState(() => _isLoadingTask = true);
+    try {
+      final task = await context.read<TaskProvider>().fetchTask(widget.taskId!);
+      if (mounted) {
+        setState(() {
+          _task = task;
+          _isLoadingTask = false;
+        });
+        _loadMessages();
+        _initSocket();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingTask = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading task: $e')),
+        );
+      }
+    }
   }
 
   void _initSocket() async {
@@ -43,10 +74,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     await ss.connect();
     if (!mounted) return;
     
-    ss.joinTask(widget.task.id);
+    ss.joinTask(_task!.id);
 
     ss.socket.on('message:new', (data) {
-      if (data['taskId'] == widget.task.id) {
+      if (data['taskId'] == _task!.id) {
         final newMsg = Message.fromJson(data);
         if (mounted && !_messages.any((m) => m.id == newMsg.id)) {
           setState(() => _messages.add(newMsg));
@@ -56,10 +87,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     });
 
     ss.socket.on('typing', (data) {
-      if (data['taskId'] == widget.task.id) {
-        final userId = data['userId'];
-        if (userId != me?['id']) {
-          setState(() => _typingUsers[userId] = data['isTyping']);
+      if (data['taskId'] == _task!.id) {
+        final userId = data['userId']?.toString();
+        if (userId != me?['id']?.toString()) {
+          setState(() => _typingUsers[int.parse(userId!)] = data['isTyping']);
         }
       }
     });
@@ -67,7 +98,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   void _loadMessages() async {
     try {
-      final msgs = await context.read<TaskProvider>().fetchTaskMessages(widget.task.id);
+      final msgs = await context.read<TaskProvider>().fetchTaskMessages(_task!.id);
       if (mounted) {
         setState(() {
           _messages.addAll(msgs);
@@ -103,7 +134,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     // Optimistic Update
     final optimistic = Message(
       id: 'tmp-${DateTime.now().millisecondsSinceEpoch}',
-      taskId: widget.task.id,
+      taskId: _task!.id,
       type: 'text',
       content: text,
       senderId: me['id'],
@@ -126,7 +157,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final replyToId = _replyingTo?.id != null ? int.tryParse(_replyingTo!.id) : null;
     
     final ss = SocketService();
-    ss.sendMessage(widget.task.id, text, replyToId: replyToId, onAck: (ack) {
+    ss.sendMessage(_task!.id, text, replyToId: replyToId, onAck: (ack) {
       if (mounted) {
         setState(() {
           _messages.removeWhere((m) => m.id == optimistic.id);
@@ -136,7 +167,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     
     _messageController.clear();
     setState(() => _replyingTo = null);
-    ss.stopTyping(widget.task.id);
+    ss.stopTyping(_task!.id);
   }
 
   void _sendImage() async {
@@ -151,7 +182,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     // Optimistic Update with local file path
     final optimistic = Message(
       id: 'tmp-img-${DateTime.now().millisecondsSinceEpoch}',
-      taskId: widget.task.id,
+      taskId: _task!.id,
       type: 'image',
       imageUrl: image.path, // Use local path for immediate display
       senderId: me['id'],
@@ -173,9 +204,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final tp = context.read<TaskProvider>();
     
     try {
-      final msg = await tp.uploadTaskImage(widget.task.id, File(image.path));
+      final msg = await tp.uploadTaskImage(_task!.id, File(image.path));
       final ss = SocketService();
-      ss.sendImage(widget.task.id, msg.imageUrl!, replyToId: replyToId, onAck: (ack) {
+      ss.sendImage(_task!.id, msg.imageUrl!, replyToId: replyToId, onAck: (ack) {
         if (mounted) {
           setState(() {
             _replyingTo = null;
@@ -197,7 +228,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   @override
   void dispose() {
     final ss = SocketService();
-    ss.leaveTask(widget.task.id);
+    if (_task != null) {
+      ss.stopTyping(_task!.id);
+      ss.leaveTask(_task!.id);
+    }
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -209,11 +243,15 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final isDark = th.brightness == Brightness.dark;
     final me = context.watch<AuthProvider>().user;
     final isAdmin = me?['role'] == 'admin';
-    final canChat = widget.task.status != 'pending' || isAdmin;
+    final canChat = _task != null && (_task!.status != 'pending' || isAdmin);
 
     final mq = MediaQuery.of(context);
     final bottomInset = mq.viewInsets.bottom;
     final bottomPadding = mq.padding.bottom;
+
+    if (_isLoadingTask || _task == null) {
+      return const Scaffold(body: Center(child: CustomLoader()));
+    }
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
@@ -222,8 +260,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.task.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Text('#${widget.task.id} • ${widget.task.status.replaceAll('_', ' ').toUpperCase()}', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+            Text(_task!.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text('#${_task!.id} • ${_task!.status.replaceAll('_', ' ').toUpperCase()}', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
           ],
         ),
         actions: [
@@ -258,7 +296,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
                       final msg = _messages[index];
-                      final isMine = msg.senderId == me?['id'];
+                      final myId = me?['id']?.toString();
+                      final senderId = (msg.senderId ?? msg.sender?.id)?.toString();
+                      final isMine = senderId == myId;
                       return _buildMessageBubble(msg, isMine);
                     },
                   ),
@@ -301,7 +341,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   Widget _buildChecklistHeader(bool isDark) {
     return Consumer<TaskProvider>(
       builder: (context, tp, child) {
-        final currentTask = tp.tasks.firstWhere((t) => t.id == widget.task.id, orElse: () => widget.task);
+        final currentTask = tp.tasks.firstWhere((t) => t.id == _task!.id, orElse: () => _task!);
         if (currentTask.points.isEmpty) return const SizedBox.shrink();
 
         return Container(
@@ -339,7 +379,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                       padding: const EdgeInsets.only(bottom: 4),
                       child: InkWell(
                         onTap: () async {
-                          await tp.togglePoint(currentTask.id, p.id, !p.isDone);
+                          await tp.togglePoint(_task!.id, p.id, !p.isDone);
                         },
                         borderRadius: BorderRadius.circular(12),
                         child: Padding(
@@ -367,96 +407,133 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   Widget _buildMessageBubble(Message msg, bool isMine) {
     final th = Theme.of(context);
     final isDark = th.brightness == Brightness.dark;
-    final dateStr = DateFormat('dd/MM/yyyy HH:mm').format(msg.createdAt);
+    final dateStr = DateFormat('hh:mm a').format(msg.createdAt.toLocal());
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (!isMine) ...[
-            _buildAvatar(msg.sender),
-            const SizedBox(width: 8),
-          ],
-          Flexible(
-            child: Column(
-              crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-              children: [
-                if (!isMine)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4, bottom: 4),
-                    child: Text(msg.sender?.username ?? 'User',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey)),
-                  ),
-                GestureDetector(
-                  onLongPress: () => setState(() => _replyingTo = msg),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: isMine
-                          ? th.colorScheme.primary.withAlpha(isDark ? 40 : 20)
-                          : (isDark ? Colors.white.withAlpha(10) : Colors.grey[100]),
-                      borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(24),
-                        topRight: const Radius.circular(24),
-                        bottomLeft: Radius.circular(isMine ? 24 : 4),
-                        bottomRight: Radius.circular(isMine ? 4 : 24),
+    return Dismissible(
+      key: Key('reply-${msg.id}'),
+      direction: DismissDirection.startToEnd,
+      confirmDismiss: (direction) async {
+        setState(() => _replyingTo = msg);
+        return false; // Don't actually remove
+      },
+      background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 20),
+        child: Icon(LucideIcons.reply, size: 20, color: th.colorScheme.primary),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Row(
+          mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (!isMine) ...[
+              _buildAvatar(msg.sender),
+              const SizedBox(width: 8),
+            ],
+            Flexible(
+              flex: 3,
+              child: Column(
+                crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  if (!isMine)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8, bottom: 4),
+                      child: Text(msg.sender?.username ?? 'User',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey)),
+                    ),
+                  GestureDetector(
+                    onLongPress: () => setState(() => _replyingTo = msg),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: isMine
+                            ? th.colorScheme.primary.withAlpha(isDark ? 50 : 30)
+                            : (isDark ? Colors.white.withAlpha(15) : Colors.grey[200]),
+                        borderRadius: BorderRadius.only(
+                          topLeft: const Radius.circular(20),
+                          topRight: const Radius.circular(20),
+                          bottomLeft: Radius.circular(isMine ? 20 : 4),
+                          bottomRight: Radius.circular(isMine ? 4 : 20),
+                        ),
+                        border: Border.all(
+                          color: isMine 
+                              ? th.colorScheme.primary.withAlpha(60) 
+                              : (isDark ? Colors.white.withAlpha(20) : Colors.black.withAlpha(8)),
+                        ),
                       ),
-                      border: Border.all(
-                        color: isMine 
-                            ? th.colorScheme.primary.withAlpha(50) 
-                            : (isDark ? Colors.white.withAlpha(10) : Colors.black.withAlpha(5)),
+                      child: Column(
+                        crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (msg.replyInfo != null)
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              margin: const EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withAlpha(10),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border(
+                                  left: !isMine ? const BorderSide(color: Colors.grey, width: 3) : BorderSide.none,
+                                  right: isMine ? const BorderSide(color: Colors.grey, width: 3) : BorderSide.none,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Replied to ${msg.replyInfo!['username'] ?? 'User'}',
+                                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: th.colorScheme.primary),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    msg.replyInfo!['content'] ?? (msg.replyInfo!['type'] == 'image' ? 'Image attachment' : ''),
+                                    style: const TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (msg.type == 'image' && msg.imageUrl != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: msg.imageUrl!.startsWith('http')
+                                      ? Image.network(msg.imageUrl!, fit: BoxFit.cover)
+                                      : (msg.id.startsWith('tmp')
+                                          ? Image.file(File(msg.imageUrl!), fit: BoxFit.cover)
+                                          : Image.network('${SocketService().baseUrl}${msg.imageUrl}', fit: BoxFit.cover)),
+                                ),
+                            ),
+                          if (msg.content != null)
+                            Text(
+                              msg.content!, 
+                              style: const TextStyle(fontSize: 14, height: 1.4),
+                              textAlign: isMine ? TextAlign.right : TextAlign.left,
+                            ),
+                          const SizedBox(height: 4),
+                          Text(
+                            dateStr, 
+                            style: TextStyle(fontSize: 9, color: Colors.grey[600]),
+                            textAlign: isMine ? TextAlign.right : TextAlign.left,
+                          ),
+                        ],
                       ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (msg.replyInfo != null)
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            margin: const EdgeInsets.only(bottom: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withAlpha(10),
-                              borderRadius: BorderRadius.circular(12),
-                              border: const Border(left: BorderSide(color: Colors.grey, width: 3)),
-                            ),
-                            child: Text(
-                              msg.replyInfo!['content'] ?? (msg.replyInfo!['type'] == 'image' ? 'Image' : ''),
-                              style: const TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        if (msg.type == 'image' && msg.imageUrl != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: msg.imageUrl!.startsWith('http')
-                                  ? Image.network(msg.imageUrl!, fit: BoxFit.cover)
-                                  : (msg.id.startsWith('tmp')
-                                      ? Image.file(File(msg.imageUrl!), fit: BoxFit.cover)
-                                      : Image.network('${SocketService().baseUrl}${msg.imageUrl}', fit: BoxFit.cover)),
-                            ),
-                          ),
-                        if (msg.content != null)
-                          Text(msg.content!, style: const TextStyle(fontSize: 14, height: 1.4)),
-                        const SizedBox(height: 6),
-                        Text(dateStr, style: TextStyle(fontSize: 10, color: Colors.grey[500])),
-                      ],
-                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          if (isMine) ...[
-            const SizedBox(width: 8),
-            _buildAvatar(msg.sender),
+            if (isMine) ...[
+              const SizedBox(width: 8),
+              _buildAvatar(msg.sender),
+            ],
+            if (!isMine) const Spacer(flex: 1),
+            // if (isMine) const Spacer(flex: 0), // No spacer needed for Right alignment if it's MainAxisAlignment.end
           ],
-        ],
+        ),
       ),
     );
   }
@@ -472,7 +549,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       ),
       clipBehavior: Clip.antiAlias,
       child: sender?.profileImageUrl != null
-          ? Image.network(sender!.profileImageUrl!, fit: BoxFit.cover)
+          ? Image.network(
+              sender!.profileImageUrl!.startsWith('http') 
+              ? sender.profileImageUrl! 
+              : '${SocketService().baseUrl}${sender.profileImageUrl}',
+              fit: BoxFit.cover,
+            )
           : Center(
               child: Text(
                 (sender?.username ?? 'U').substring(0, 1).toUpperCase(),
@@ -483,7 +565,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   Widget _buildInput(ThemeData th, bool isDark, double bottomInset, double bottomSafePadding) {
-    // Determine effective bottom padding based on keyboard state
     double effectiveBottomPadding = bottomInset > 0 ? 8.0 : 16.0 + bottomSafePadding;
 
     return Container(
@@ -522,8 +603,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   minLines: 1,
                   onChanged: (val) {
                     final ss = SocketService();
-                    if (val.isNotEmpty) ss.startTyping(widget.task.id);
-                    else ss.stopTyping(widget.task.id);
+                    if (val.isNotEmpty) ss.startTyping(_task!.id);
+                    else ss.stopTyping(_task!.id);
                   },
                   decoration: InputDecoration(
                     hintText: 'Message...',

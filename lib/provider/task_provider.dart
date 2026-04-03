@@ -36,6 +36,15 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
+  Future<Task> fetchTask(int id) async {
+    try {
+      final response = await _api.get('/api/tasks/$id');
+      return Task.fromJson(response['item']);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Future<Task> createTask(Map<String, dynamic> payload) async {
     try {
       final response = await _api.post('/api/tasks', body: payload);
