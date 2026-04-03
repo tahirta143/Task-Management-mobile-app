@@ -215,7 +215,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     final isDark = th.brightness == Brightness.dark;
     final me = context.watch<AuthProvider>().user;
 
+    final mq = MediaQuery.of(context);
+    final bottomInset = mq.viewInsets.bottom;
+    final bottomPadding = mq.padding.bottom;
+
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         titleSpacing: 0,
         title: Column(
@@ -231,65 +236,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       ),
       body: Column(
         children: [
-          // Checklist / Points
-          Consumer<TaskProvider>(
-            builder: (context, tp, child) {
-              final currentTask = tp.tasks.firstWhere((t) => t.id == widget.taskId, orElse: () => throw 'Task not found');
-              if (currentTask.points.isEmpty) return const SizedBox.shrink();
-
-              return Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withAlpha(10) : Colors.black.withAlpha(5),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Checklist', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
-                        Text('${currentTask.points.where((p) => p.isDone).length}/${currentTask.points.length} done', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: currentTask.points.isEmpty ? 0 : currentTask.points.where((p) => p.isDone).length / currentTask.points.length,
-                        minHeight: 6,
-                        backgroundColor: isDark ? Colors.white.withAlpha(10) : Colors.black.withAlpha(10),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    ...currentTask.points.map((p) => Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: InkWell(
-                        onTap: () async {
-                          await tp.togglePoint(currentTask.id, p.id, !p.isDone);
-                        },
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                          child: Row(
-                            children: [
-                              Icon(p.isDone ? LucideIcons.checkCircle : LucideIcons.circle, size: 18, color: p.isDone ? Colors.green : Colors.grey),
-                              const SizedBox(width: 12),
-                              Expanded(child: Text(p.label, style: TextStyle(fontSize: 13, decoration: p.isDone ? TextDecoration.lineThrough : null, color: p.isDone ? Colors.grey : null))),
-                            ],
-                          ),
-                        ),
-                      ),
-                    )).toList(),
-                  ],
-                ),
-              );
-            },
+          // Checklist / Points - Only points are scrollable
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: bottomInset > 0 ? 200.0 : 240.0,
+            ),
+            child: _buildChecklistHeader(isDark),
           ),
 
-          // Messages
+          // Messages List
           Expanded(
             child: _isLoadingMessages 
               ? const CustomLoader()
@@ -325,9 +280,75 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             ),
 
           // Input Area
-          _buildInput(th, isDark),
+          _buildInput(th, isDark, bottomInset, bottomPadding),
         ],
       ),
+    );
+  }
+
+  Widget _buildChecklistHeader(bool isDark) {
+    return Consumer<TaskProvider>(
+      builder: (context, tp, child) {
+        final currentTask = tp.tasks.firstWhere((t) => t.id == widget.taskId, orElse: () => throw 'Task not found');
+        if (currentTask.points.isEmpty) return const SizedBox.shrink();
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withAlpha(10) : Colors.black.withAlpha(5),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Checklist', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                  Text('${currentTask.points.where((p) => p.isDone).length}/${currentTask.points.length} done', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: currentTask.points.isEmpty ? 0 : currentTask.points.where((p) => p.isDone).length / currentTask.points.length,
+                  minHeight: 6,
+                  backgroundColor: isDark ? Colors.white.withAlpha(10) : Colors.black.withAlpha(10),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: currentTask.points.map((p) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: InkWell(
+                        onTap: () async {
+                          await tp.togglePoint(currentTask.id, p.id, !p.isDone);
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                          child: Row(
+                            children: [
+                              Icon(p.isDone ? LucideIcons.checkCircle : LucideIcons.circle, size: 18, color: p.isDone ? Colors.green : Colors.grey),
+                              const SizedBox(width: 12),
+                              Expanded(child: Text(p.label, style: TextStyle(fontSize: 13, decoration: p.isDone ? TextDecoration.lineThrough : null, color: p.isDone ? Colors.grey : null))),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -454,9 +475,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 
-  Widget _buildInput(ThemeData th, bool isDark) {
+  Widget _buildInput(ThemeData th, bool isDark, double bottomInset, double bottomSafePadding) {
+    // When keyboard is open, we use a smaller padding, otherwise use safe area padding
+    double effectiveBottomPadding = bottomInset > 0 ? 8.0 : 16.0 + bottomSafePadding;
+    
     return Container(
-      padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + MediaQuery.of(context).padding.bottom),
+      padding: EdgeInsets.fromLTRB(16, 8, 16, effectiveBottomPadding),
       decoration: BoxDecoration(
         color: th.scaffoldBackgroundColor,
         border: Border(top: BorderSide(color: isDark ? Colors.white.withAlpha(10) : Colors.black.withAlpha(5))),
