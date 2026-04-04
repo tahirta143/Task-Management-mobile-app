@@ -64,13 +64,13 @@ class _AdminTrackingScreenState extends State<AdminTrackingScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildHeader(th, horizontalPadding, screenWidth),
+          _buildAnimatedBlock(0, _buildHeader(th, horizontalPadding, screenWidth)),
           
           // Stats Cards Section
           Padding(
             padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
             child: Consumer<AdminProvider>(
-              builder: (context, provider, _) => _buildSummaryCards(provider, isDark, th),
+              builder: (context, provider, _) => _buildAnimatedBlock(150, _buildSummaryCards(provider, isDark, th)),
             ),
           ),
           
@@ -135,7 +135,10 @@ class _AdminTrackingScreenState extends State<AdminTrackingScreen> {
                                   return name.contains(query);
                                 }).toList();
                                 final session = filtered[index];
-                                return _SessionCard(session: session);
+                                return _buildAnimatedBlock(
+                                  300 + (index * 100),
+                                  _SessionCard(session: session),
+                                );
                               },
                             ),
                 );
@@ -194,6 +197,23 @@ class _AdminTrackingScreenState extends State<AdminTrackingScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildAnimatedBlock(int delayMs, Widget child) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: Duration(milliseconds: 400 + delayMs),
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 20 * (1 - value)),
+            child: child,
+          ),
+        );
+      },
+      child: child,
     );
   }
 
