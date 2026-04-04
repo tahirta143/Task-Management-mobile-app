@@ -206,12 +206,23 @@ class _AdminTasksScreenState extends State<AdminTasksScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          t.title,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                          Text(
+                            t.title,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (t.projectName != null && t.projectName!.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4, bottom: 2),
+                              child: Text(
+                                t.projectName!,
+                                style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: th.colorScheme.primary.withAlpha(200)),
+                              ),
+                            ),
                         const SizedBox(height: 6),
                         Row(
                           children: [
@@ -266,6 +277,7 @@ class _AdminTasksScreenState extends State<AdminTasksScreen> {
   void _showTaskEditSheet(BuildContext context, Task t, bool isDark, ThemeData th) {
     // Local controllers and state for editing
     final titleController = TextEditingController(text: t.title);
+    final projectNameController = TextEditingController(text: t.projectName ?? '');
     final pointInputController = TextEditingController();
     
     // Convert TaskPoint to editable Map format or use them directly
@@ -313,6 +325,7 @@ class _AdminTasksScreenState extends State<AdminTasksScreen> {
 
                 final patch = {
                   'title': titleController.text.trim(),
+                  'projectName': projectNameController.text.trim(),
                   'status': status,
                   'priority': priority,
                   'companyId': companyId,
@@ -406,6 +419,16 @@ class _AdminTasksScreenState extends State<AdminTasksScreen> {
                           TextField(
                             controller: titleController,
                             decoration: const InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))),
+                          ),
+                          const SizedBox(height: 16),
+
+                          _buildLabel('Project Name'),
+                          TextField(
+                            controller: projectNameController,
+                            decoration: const InputDecoration(
+                                hintText: 'E.g. Q2 Website Refresh',
+                                border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.all(Radius.circular(12)))),
                           ),
                           const SizedBox(height: 16),
 

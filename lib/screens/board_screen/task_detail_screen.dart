@@ -261,7 +261,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(_task!.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Text('#${_task!.id} • ${_task!.status.replaceAll('_', ' ').toUpperCase()}', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+            Text('#${_task!.id} • ${_task!.status.replaceAll('_', ' ').toUpperCase()}${_task!.projectName != null && _task!.projectName!.isNotEmpty ? ' • ${_task!.projectName}' : ''}', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
           ],
         ),
         actions: [

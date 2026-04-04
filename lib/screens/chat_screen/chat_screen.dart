@@ -157,6 +157,7 @@ class ChatScreen extends StatelessWidget {
                   time: '',
                   unread: 0,
                   isSelected: false,
+                  projectName: t.projectName,
                   delay: index * 50,
                 );
               },
@@ -166,7 +167,7 @@ class ChatScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildChatTile(BuildContext context, ThemeData th, bool isDark, {required int taskId, required String title, required String subtitle, required String lastMessage, required String time, required int unread, required bool isSelected, required int delay}) {
+  Widget _buildChatTile(BuildContext context, ThemeData th, bool isDark, {required int taskId, required String title, required String subtitle, required String lastMessage, required String time, required int unread, required bool isSelected, required int delay, String? projectName}) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
       duration: Duration(milliseconds: 400 + delay),
@@ -210,6 +211,25 @@ class ChatScreen extends StatelessWidget {
                   ]
                 ],
               ),
+              if (projectName != null && projectName.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, bottom: 2),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0EA5E9).withAlpha(30),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: const Color(0xFF0EA5E9).withAlpha(50)),
+                    ),
+                    child: Text(
+                      projectName,
+                      style: const TextStyle(
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF7DD3FC)),
+                    ),
+                  ),
+                ),
               const SizedBox(height: 4),
               Text(subtitle, style: const TextStyle(fontSize: 10, color: Colors.grey)),
               const SizedBox(height: 12),

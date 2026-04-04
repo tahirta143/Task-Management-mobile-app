@@ -158,28 +158,29 @@ class LocalNotificationService {
   void _onNotificationTap(String payload) {
     try {
       final Map<String, dynamic> data = jsonDecode(payload);
-      final taskId = data['taskId'];
+      final rawId = data['taskId'];
       final type = data['type'];
-
+      
+      final int? taskId = int.tryParse(rawId?.toString() ?? '');
       if (taskId == null) return;
 
-      final context = navigatorKey.currentContext;
-      if (context == null) return;
+      final currentState = navigatorKey.currentState;
+      if (currentState == null) return;
 
       if (type == 'chat') {
-        navigatorKey.currentState?.push(
+        currentState.push(
           MaterialPageRoute(
             builder: (_) => ChatDetailScreen(
-              taskId: int.parse(taskId.toString()),
-              taskTitle: data['taskTitle'] ?? 'Chat',
+              taskId: taskId,
+              taskTitle: data['taskTitle'] ?? 'Chat Room',
             ),
           ),
         );
       } else if (type == 'task') {
-        navigatorKey.currentState?.push(
+        currentState.push(
           MaterialPageRoute(
             builder: (_) => TaskDetailScreen(
-              taskId: int.parse(taskId.toString()),
+              taskId: taskId,
             ),
           ),
         );

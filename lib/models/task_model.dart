@@ -40,6 +40,7 @@ class Task {
   final int? creatorId;
   final List<User> assignees;
   final List<TaskPoint> points;
+  final String? projectName;
   final DateTime updatedAt;
   final int unreadCount;
   final int? _progressPercent;
@@ -57,6 +58,7 @@ class Task {
     this.assignees = const [],
     this.points = const [],
     required this.updatedAt,
+    this.projectName,
     this.unreadCount = 0,
     int? progressPercent,
   }) : _progressPercent = progressPercent;
@@ -75,6 +77,7 @@ class Task {
       assignees: (json['assignees'] as List?)?.map((u) => User.fromJson(u)).toList() ?? [],
       points: (json['points'] as List?)?.map((p) => TaskPoint.fromJson(p)).toList() ?? [],
       updatedAt: DateTime.parse((json['updatedAt'] ?? DateTime.now().toIso8601String()) as String),
+      projectName: json['projectName'],
       unreadCount: json['unreadCount'] ?? 0,
       progressPercent: json['progressPercent'],
     );
@@ -93,6 +96,7 @@ class Task {
       'creatorId': creatorId,
       'assignees': assignees.map((u) => u.toJson()).toList(),
       'points': points.map((p) => p.toJson()).toList(),
+      'projectName': projectName,
       'updatedAt': updatedAt.toIso8601String(),
     };
   }

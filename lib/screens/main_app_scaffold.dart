@@ -105,6 +105,31 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
         message: content,
       );
     });
+
+    // ── Session termination notifications ───────────────────────────────────
+    ss.listenForSessionTerminated((payload) async {
+      if (!mounted) return;
+      final auth = context.read<AuthProvider>();
+      
+      // 1. Clear local session
+      await auth.logout();
+      
+      // 2. Disconnect socket
+      ss.disconnect();
+
+      // 3. Navigate to login/splash
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Your session has been terminated by an administrator.'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+    });
   }
 
   void _showNotificationToast(AppNotification notif) {
@@ -371,6 +396,7 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
   void dispose() {
     SocketService().stopListeningForTaskAssigned();
     SocketService().stopListeningForNewChatMessage();
+    SocketService().stopListeningForSessionTerminated();
     super.dispose();
   }
 

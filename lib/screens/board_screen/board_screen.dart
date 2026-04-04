@@ -29,6 +29,7 @@ class _BoardScreenState extends State<BoardScreen> {
 
   // Form Controllers
   final _titleController = TextEditingController();
+  final _projectNameController = TextEditingController();
   final _pointInputController = TextEditingController();
   final _startDateController = TextEditingController();
   final _endDateController = TextEditingController();
@@ -77,6 +78,7 @@ class _BoardScreenState extends State<BoardScreen> {
     ss.socket.off('task:delete');
     ss.socket.off('message:new');
     _titleController.dispose();
+    _projectNameController.dispose();
     _pointInputController.dispose();
     _startDateController.dispose();
     _endDateController.dispose();
@@ -132,6 +134,7 @@ class _BoardScreenState extends State<BoardScreen> {
 
     final payload = {
       'title': _titleController.text,
+      'projectName': _projectNameController.text.trim(),
       'status': _status,
       'priority': _priority,
       'startDate': _startDateController.text.isNotEmpty
@@ -171,6 +174,7 @@ class _BoardScreenState extends State<BoardScreen> {
     final isDark = th.brightness == Brightness.dark;
 
     _titleController.clear();
+    _projectNameController.clear();
     _pointInputController.clear();
     _startDateController.clear();
     _endDateController.clear();
@@ -257,6 +261,22 @@ class _BoardScreenState extends State<BoardScreen> {
                               decoration: InputDecoration(
                                 hintText:
                                 'E.g. Prepare weekly operations report',
+                                fillColor: isDark
+                                    ? Colors.white.withAlpha(10)
+                                    : Colors.black.withAlpha(5),
+                                filled: true,
+                                border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: BorderSide.none),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+
+                            _buildLabel('Project name'),
+                            TextField(
+                              controller: _projectNameController,
+                              decoration: InputDecoration(
+                                hintText: 'E.g. Q2 Website Refresh',
                                 fillColor: isDark
                                     ? Colors.white.withAlpha(10)
                                     : Colors.black.withAlpha(5),
@@ -1204,14 +1224,40 @@ class _BoardScreenState extends State<BoardScreen> {
             Padding(
               padding:
               const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Text(
-                task.title,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    letterSpacing: -0.2),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    task.title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        letterSpacing: -0.2),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (task.projectName != null && task.projectName!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0EA5E9).withAlpha(30),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: const Color(0xFF0EA5E9).withAlpha(50)),
+                        ),
+                        child: Text(
+                          task.projectName!,
+                          style: const TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF7DD3FC)),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
 

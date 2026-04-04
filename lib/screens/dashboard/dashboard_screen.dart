@@ -283,7 +283,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           GestureDetector(
             onTap: _pickImage,
             child: SizedBox(
-              height: 150,
+              height: 155,
               width: double.infinity,
               child: Stack(
                 fit: StackFit.expand,
@@ -292,7 +292,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   imageProvider != null
                       ? Image(
                     image: imageProvider,
-                    fit: BoxFit.cover,
+                    fit: BoxFit.fitWidth,
                   )
                       : Container(
                     color: isDark
@@ -374,7 +374,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
-                              isAdmin ? 'Administrator' : 'Member',
+                              isAdmin ? 'Administrator' : 'Team Member',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
@@ -383,24 +383,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                           ),
                           // Team badge
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? Colors.white.withAlpha(18)
-                                  : Colors.black.withAlpha(8),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              'Team Member',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white70 : Colors.black54,
-                              ),
-                            ),
-                          ),
+                          // Container(
+                          //   padding: const EdgeInsets.symmetric(
+                          //       horizontal: 12, vertical: 4),
+                          //   decoration: BoxDecoration(
+                          //     color: isDark
+                          //         ? Colors.white.withAlpha(18)
+                          //         : Colors.black.withAlpha(8),
+                          //     borderRadius: BorderRadius.circular(20),
+                          //   ),
+                          //   child: Text(
+                          //     'Team Member',
+                          //     style: TextStyle(
+                          //       fontSize: 11,
+                          //       fontWeight: FontWeight.w600,
+                          //       color: isDark ? Colors.white70 : Colors.black54,
+                          //     ),
+                          //   ),
+                          // ),
                         ],
                       ),
                     ],

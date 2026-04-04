@@ -45,7 +45,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
     await ss.connect();
     if (!mounted) return;
-    
+
     ss.joinTask(widget.taskId);
 
     ss.socket.on('message:new', (data) {
@@ -132,7 +132,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         setState(() => _messages.removeWhere((m) => m.id == optimistic.id));
       }
     });
-    
+
     _messageController.clear();
     setState(() => _replyingTo = null);
     ss.stopTyping(widget.taskId);
@@ -249,8 +249,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                           bottomRight: Radius.circular(isMine ? 4 : 20),
                         ),
                         border: Border.all(
-                          color: isMine 
-                              ? th.colorScheme.primary.withAlpha(60) 
+                          color: isMine
+                              ? th.colorScheme.primary.withAlpha(60)
                               : (isDark ? Colors.white.withAlpha(20) : Colors.black.withAlpha(8)),
                         ),
                       ),
@@ -330,17 +330,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       clipBehavior: Clip.antiAlias,
       child: sender?.profileImageUrl != null
           ? Image.network(
-              sender!.profileImageUrl!.startsWith('http') 
-              ? sender.profileImageUrl! 
-              : '${SocketService().baseUrl}${sender.profileImageUrl}',
-              fit: BoxFit.cover,
-            )
+        sender!.profileImageUrl!.startsWith('http')
+            ? sender.profileImageUrl!
+            : '${SocketService().baseUrl}${sender.profileImageUrl}',
+        fit: BoxFit.cover,
+      )
           : Center(
-              child: Text(
-                (sender?.username ?? 'U').substring(0, 1).toUpperCase(),
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
-              ),
-            ),
+        child: Text(
+          (sender?.username ?? 'U').substring(0, 1).toUpperCase(),
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
+        ),
+      ),
     );
   }
 
@@ -370,27 +370,93 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       ),
       body: Column(
         children: [
-          // Checklist header logic can be added here if needed, 
-          // usually standard chat screens don't have it but we'll stick to the previous layout
-          Expanded(
-            child: _isLoadingMessages 
-                ? const Center(child: CustomLoader()) 
-                : RefreshIndicator(
-                    onRefresh: () async {
-                      _loadMessages();
-                    },
-                    child: ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      controller: _scrollController,
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _messages.length,
-                      itemBuilder: (context, index) {
-                        final msg = _messages[index];
-                        final isMine = msg.senderId?.toString() == me?['id']?.toString();
-                        return _buildMessageBubble(msg, isMine);
-                      },
+          // Checklist / Points
+          Consumer<TaskProvider>(
+            builder: (context, tp, child) {
+              final currentTask = tp.tasks.firstWhere((t) => t.id == widget.taskId, orElse: () => Task(id: widget.taskId, title: widget.taskTitle, description: '', status: 'unknown', priority: 'medium', creatorId: 0, assignees: [], points: [], updatedAt: DateTime.now()));
+              if (currentTask.points.isEmpty) return const SizedBox.shrink();
+
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withAlpha(10) : Colors.black.withAlpha(5),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Checklist', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                        Text('${currentTask.points.where((p) => p.isDone).length}/${currentTask.points.length} done', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                      ],
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: currentTask.points.isEmpty ? 0 : currentTask.points.where((p) => p.isDone).length / currentTask.points.length,
+                        minHeight: 6,
+                        backgroundColor: isDark ? Colors.white.withAlpha(10) : Colors.black.withAlpha(10),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxHeight: bottomInset > 0 ? 120 : 180),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          children: currentTask.points.map((p) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: InkWell(
+                              onTap: () async {
+                                await tp.togglePoint(currentTask.id, p.id, !p.isDone);
+                              },
+                              borderRadius: BorderRadius.circular(12),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                                child: Row(
+                                  children: [
+                                    Icon(p.isDone ? LucideIcons.checkCircle : LucideIcons.circle, size: 18, color: p.isDone ? Colors.green : Colors.grey),
+                                    const SizedBox(width: 12),
+                                    Expanded(child: Text(p.label, style: TextStyle(fontSize: 13, decoration: p.isDone ? TextDecoration.lineThrough : null, color: p.isDone ? Colors.grey : null))),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          )).toList(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+
+          Expanded(
+            child: _isLoadingMessages
+                ? const Center(child: CustomLoader())
+                : RefreshIndicator(
+              onRefresh: () async {
+                _loadMessages();
+              },
+              child: ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                controller: _scrollController,
+                padding: const EdgeInsets.all(16),
+                itemCount: _messages.length,
+                itemBuilder: (context, index) {
+                  final msg = _messages[index];
+                  final myId = me?['id']?.toString();
+                  final senderId = (msg.senderId ?? msg.sender?.id)?.toString();
+                  final isMine = senderId != null && myId != null && senderId == myId;
+                  return _buildMessageBubble(msg, isMine);
+                },
+              ),
+            ),
           ),
           if (_typingUsers.values.any((e) => e))
             Padding(
@@ -462,7 +528,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               ),
               const SizedBox(width: 8),
               IconButton(
-                onPressed: _sendMessage, 
+                onPressed: _sendMessage,
                 icon: Icon(LucideIcons.send, color: th.colorScheme.primary),
                 style: IconButton.styleFrom(
                   backgroundColor: th.colorScheme.primary.withAlpha(30),

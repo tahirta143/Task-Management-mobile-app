@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -16,13 +17,34 @@ class AdminTrackingScreen extends StatefulWidget {
 class _AdminTrackingScreenState extends State<AdminTrackingScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AdminProvider>().fetchTrackedSessions();
+      _fetchData();
+      _startTimer();
     });
+  }
+
+  void _startTimer() {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted) _fetchData();
+    });
+  }
+
+  void _fetchData() {
+    // We don't want to show the full screen loader for periodic background refreshes
+    // so we don't set isLoading unless it's a manual pull or first load
+    context.read<AdminProvider>().fetchTrackedSessions();
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -43,46 +65,132 @@ class _AdminTrackingScreenState extends State<AdminTrackingScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(th, horizontalPadding, screenWidth),
+          
+          // Stats Cards Section
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+            child: Consumer<AdminProvider>(
+              builder: (context, provider, _) => _buildSummaryCards(provider, isDark, th),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
           Padding(
             padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 8.0),
-            child: _buildSearchBar(isDark, th),
+            // child: _buildSearchBar(isDark, th),
           ),
+          
           Expanded(
             child: Consumer<AdminProvider>(
               builder: (context, provider, child) {
-                if (provider.isLoading && provider.sessions.isEmpty) {
-                  return const Center(child: CustomLoader());
-                }
-
-                final filteredSessions = provider.sessions.where((s) {
-                  final name = s.user.username.toLowerCase();
-                  final query = _searchQuery.toLowerCase();
-                  return name.contains(query);
-                }).toList();
-
-                if (filteredSessions.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(LucideIcons.shieldAlert, size: 48, color: Colors.grey.withAlpha(100)),
-                        const SizedBox(height: 16),
-                        const Text('No active sessions found', style: TextStyle(color: Colors.grey)),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  padding: EdgeInsets.all(horizontalPadding),
-                  itemCount: filteredSessions.length,
-                  itemBuilder: (context, index) {
-                    final session = filteredSessions[index];
-                    return _SessionCard(session: session);
-                  },
+                return RefreshIndicator(
+                  color: th.colorScheme.primary,
+                  onRefresh: () async => await provider.fetchTrackedSessions(),
+                  child: provider.isLoading
+                      ? LayoutBuilder(
+                          builder: (context, constraints) {
+                            return SingleChildScrollView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                                child: const CustomLoader(),
+                              ),
+                            );
+                          },
+                        )
+                      : provider.sessions.isEmpty
+                          ? LayoutBuilder(
+                              builder: (context, constraints) {
+                                return SingleChildScrollView(
+                                  physics: const AlwaysScrollableScrollPhysics(),
+                                  child: ConstrainedBox(
+                                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                                    child: Center(
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(LucideIcons.shieldAlert, size: 48, color: Colors.grey.withAlpha(100)),
+                                          const SizedBox(height: 16),
+                                          const Text('No active sessions found', style: TextStyle(color: Colors.grey)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            )
+                          : ListView.builder(
+                              padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 8),
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              itemCount: provider.sessions.where((s) {
+                                final name = s.user.username.toLowerCase();
+                                final query = _searchQuery.toLowerCase();
+                                return name.contains(query);
+                              }).length,
+                              itemBuilder: (context, index) {
+                                final filtered = provider.sessions.where((s) {
+                                  final name = s.user.username.toLowerCase();
+                                  final query = _searchQuery.toLowerCase();
+                                  return name.contains(query);
+                                }).toList();
+                                final session = filtered[index];
+                                return _SessionCard(session: session);
+                              },
+                            ),
                 );
               },
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryCards(AdminProvider provider, bool isDark, ThemeData th) {
+    if (provider.sessions.isEmpty && !provider.isLoading) return const SizedBox.shrink();
+
+    final totalSessions = provider.sessions.length;
+    final uniqueUsers = provider.sessions.map((s) => s.user.id).toSet().length;
+    final totalSockets = provider.sessions.fold(0, (sum, session) => sum + session.socketConnectionCount);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double cardWidth = (constraints.maxWidth - 20) / 3;
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _buildStatCard('SESSIONS', totalSessions.toString(), LucideIcons.activity, th.colorScheme.primary, isDark, cardWidth),
+            _buildStatCard('LIVE USERS', uniqueUsers.toString(), LucideIcons.users, Colors.blueAccent, isDark, cardWidth),
+            _buildStatCard('SOCKETS', totalSockets.toString(), LucideIcons.zap, Colors.orangeAccent, isDark, cardWidth),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildStatCard(String label, String value, IconData icon, Color color, bool isDark, double width) {
+    return Container(
+      width: width,
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withAlpha(10) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isDark ? Colors.white.withAlpha(20) : Colors.black.withAlpha(5)),
+        boxShadow: isDark ? null : [BoxShadow(color: Colors.black.withAlpha(5), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(height: 10),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: -0.5),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.grey.withAlpha(150), letterSpacing: 0.5),
           ),
         ],
       ),
@@ -111,51 +219,51 @@ class _AdminTrackingScreenState extends State<AdminTrackingScreen> {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            'Active User Sessions',
-            style: TextStyle(
-              fontSize: titleFontSize,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -1,
-            ),
-          ),
+          // Text(
+          //   'Active User Sessions',
+          //   style: TextStyle(
+          //     fontSize: titleFontSize,
+          //     fontWeight: FontWeight.bold,
+          //     letterSpacing: -1,
+          //   ),
+          // ),
         ],
       ),
     );
   }
 
-  Widget _buildSearchBar(bool isDark, ThemeData th) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? Colors.white.withAlpha(15) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: isDark
-            ? null
-            : [BoxShadow(color: Colors.black.withAlpha(5), blurRadius: 15, offset: const Offset(0, 5))],
-      ),
-      child: TextField(
-        controller: _searchController,
-        style: const TextStyle(fontSize: 14),
-        decoration: InputDecoration(
-          hintText: 'Search by user...',
-          hintStyle: TextStyle(color: Colors.grey.withAlpha(150)),
-          prefixIcon: Icon(LucideIcons.search, size: 18, color: th.colorScheme.primary),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(
-            icon: const Icon(LucideIcons.x, size: 16),
-            onPressed: () {
-              _searchController.clear();
-              setState(() => _searchQuery = '');
-            },
-          )
-              : null,
-        ),
-        onChanged: (value) => setState(() => _searchQuery = value),
-      ),
-    );
-  }
+  // Widget _buildSearchBar(bool isDark, ThemeData th) {
+  //   return Container(
+  //     decoration: BoxDecoration(
+  //       color: isDark ? Colors.white.withAlpha(15) : Colors.white,
+  //       borderRadius: BorderRadius.circular(20),
+  //       boxShadow: isDark
+  //           ? null
+  //           : [BoxShadow(color: Colors.black.withAlpha(5), blurRadius: 15, offset: const Offset(0, 5))],
+  //     ),
+  //     child: TextField(
+  //       controller: _searchController,
+  //       style: const TextStyle(fontSize: 14),
+  //       decoration: InputDecoration(
+  //         hintText: 'Search by user...',
+  //         hintStyle: TextStyle(color: Colors.grey.withAlpha(150)),
+  //         prefixIcon: Icon(LucideIcons.search, size: 18, color: th.colorScheme.primary),
+  //         border: InputBorder.none,
+  //         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+  //         suffixIcon: _searchQuery.isNotEmpty
+  //             ? IconButton(
+  //                 icon: const Icon(LucideIcons.x, size: 16),
+  //                 onPressed: () {
+  //                   _searchController.clear();
+  //                   setState(() => _searchQuery = '');
+  //                 },
+  //               )
+  //             : null,
+  //       ),
+  //       onChanged: (value) => setState(() => _searchQuery = value),
+  //     ),
+  //   );
+  // }
 }
 
 class _SessionCard extends StatelessWidget {
