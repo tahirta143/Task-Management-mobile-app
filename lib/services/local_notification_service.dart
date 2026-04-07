@@ -19,6 +19,10 @@ class LocalNotificationService {
 
   bool _initialized = false;
   bool get isInitialized => _initialized;
+  int? currentUserId;
+  String? currentUsername;
+
+
 
   // ─── Android channel config ───────────────────────────────────────────────
   static const String _channelId = 'task_manager_notifications';
@@ -134,7 +138,28 @@ class LocalNotificationService {
   void _handleRemoteMessage(RemoteMessage message) {
     if (message.notification != null) {
       final data = message.data;
+      
+      // Filter out notifications for messages sent by self
+      final rawSenderId = data['senderId'] ?? data['userId'] ?? data['fromId'] ?? data['id'];
+      final senderUsername = data['senderUsername'] ?? data['username'];
+      
+      bool isMe = false;
+      if (rawSenderId != null && currentUserId != null && rawSenderId.toString() == currentUserId.toString()) {
+        isMe = true;
+      } else if (senderUsername != null && currentUsername != null && 
+                 senderUsername.toString().toLowerCase() == currentUsername!.toLowerCase()) {
+        isMe = true;
+      }
+
+      if (isMe) {
+        debugPrint('FCM: FILTERED SELF-MESSAGE');
+        return;
+      }
+
       final payload = data.isNotEmpty ? jsonEncode(data) : null;
+
+
+
       
       show(
         id: message.hashCode,

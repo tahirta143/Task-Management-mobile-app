@@ -41,7 +41,9 @@ class Task {
   final List<User> assignees;
   final List<TaskPoint> points;
   final String? projectName;
+  final int? projectId;
   final DateTime updatedAt;
+
   final int unreadCount;
   final int? _progressPercent;
 
@@ -59,9 +61,11 @@ class Task {
     this.points = const [],
     required this.updatedAt,
     this.projectName,
+    this.projectId,
     this.unreadCount = 0,
     int? progressPercent,
   }) : _progressPercent = progressPercent;
+
 
   factory Task.fromJson(Map<String, dynamic> json) {
     return Task(
@@ -78,7 +82,9 @@ class Task {
       points: (json['points'] as List?)?.map((p) => TaskPoint.fromJson(p)).toList() ?? [],
       updatedAt: DateTime.parse((json['updatedAt'] ?? DateTime.now().toIso8601String()) as String),
       projectName: json['projectName'],
+      projectId: json['projectId'],
       unreadCount: json['unreadCount'] ?? 0,
+
       progressPercent: json['progressPercent'],
     );
   }
@@ -97,7 +103,9 @@ class Task {
       'assignees': assignees.map((u) => u.toJson()).toList(),
       'points': points.map((p) => p.toJson()).toList(),
       'projectName': projectName,
+      'projectId': projectId,
       'updatedAt': updatedAt.toIso8601String(),
+
     };
   }
 

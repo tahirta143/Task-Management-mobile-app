@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../../../models/project_model.dart';
 import '../../../provider/admin_provider.dart';
 import '../../../models/task_model.dart';
 import '../../../models/user_model.dart';
@@ -27,7 +28,9 @@ class _AdminTasksScreenState extends State<AdminTasksScreen> {
       context.read<TaskProvider>().fetchTasks();
       context.read<AdminProvider>().fetchUsers();
       context.read<AdminProvider>().fetchCompanies();
+      context.read<AdminProvider>().fetchProjects();
     });
+
   }
 
   @override
@@ -64,7 +67,9 @@ class _AdminTasksScreenState extends State<AdminTasksScreen> {
           await tp.fetchTasks();
           await context.read<AdminProvider>().fetchUsers();
           await context.read<AdminProvider>().fetchCompanies();
+          await context.read<AdminProvider>().fetchProjects();
         },
+
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16.0),
@@ -277,7 +282,10 @@ class _AdminTasksScreenState extends State<AdminTasksScreen> {
   void _showTaskEditSheet(BuildContext context, Task t, bool isDark, ThemeData th) {
     // Local controllers and state for editing
     final titleController = TextEditingController(text: t.title);
-    final projectNameController = TextEditingController(text: t.projectName ?? '');
+    String? selectedProjectName = t.projectName;
+    int? projectId = t.projectId;
+
+
     final pointInputController = TextEditingController();
     
     // Convert TaskPoint to editable Map format or use them directly
@@ -321,12 +329,17 @@ class _AdminTasksScreenState extends State<AdminTasksScreen> {
                 DateTime? finalDueDate;
                 if (dueDate != null) {
                   finalDueDate = DateTime(dueDate!.year, dueDate!.month, dueDate!.day, dueTime!.hour, dueTime!.minute);
-                }
+                  }
+
+                final selectedProject = ap.projects.cast<Project?>().firstWhere((p) => p?.name == selectedProjectName, orElse: () => null);
 
                 final patch = {
                   'title': titleController.text.trim(),
-                  'projectName': projectNameController.text.trim(),
+                  'projectId': selectedProject?.id,
+                  'projectName': selectedProjectName ?? '',
                   'status': status,
+
+
                   'priority': priority,
                   'companyId': companyId,
                   'startDate': startDate?.toIso8601String(),
@@ -422,15 +435,22 @@ class _AdminTasksScreenState extends State<AdminTasksScreen> {
                           ),
                           const SizedBox(height: 16),
 
-                          _buildLabel('Project Name'),
-                          TextField(
-                            controller: projectNameController,
+                          _buildLabel('Project'),
+                          DropdownButtonFormField<String?>(
+                            value: ap.projects.any((p) => p.name == selectedProjectName) ? selectedProjectName : null,
                             decoration: const InputDecoration(
-                                hintText: 'E.g. Q2 Website Refresh',
-                                border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.all(Radius.circular(12)))),
+                              hintText: 'Select Project',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                            ),
+                            items: [
+                              const DropdownMenuItem(value: null, child: Text('No Project', style: TextStyle(fontSize: 12))),
+                              ...ap.projects.map((p) => DropdownMenuItem(value: p.name, child: Text(p.name, style: const TextStyle(fontSize: 12)))),
+                            ],
+                            onChanged: (val) => setModalState(() => selectedProjectName = val),
                           ),
                           const SizedBox(height: 16),
+
+
 
                           _buildLabel('Points (Checklist)'),
                           Row(

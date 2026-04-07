@@ -31,6 +31,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   Task? _task;
   final Map<int, bool> _typingUsers = {};
   Message? _replyingTo;
+  Message? _editingMessage;
+  File? _pendingImage;
+  bool _isUploadingDetail = false;
+
 
   @override
   void initState() {
@@ -94,7 +98,51 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         }
       }
     });
+
+    ss.socket.on('message:update', (data) {
+      if (data['taskId']?.toString() == _task!.id.toString()) {
+        final updated = Message.fromJson(data);
+        if (mounted) {
+          setState(() {
+            final idx = _messages.indexWhere((m) => m.id == updated.id);
+            if (idx != -1) {
+              _messages[idx] = updated;
+            }
+          });
+        }
+      }
+    });
+
+    ss.socket.on('message:delete', (data) {
+      if (data['taskId']?.toString() == _task!.id.toString()) {
+        final messageId = (data['id'] ?? data['messageId'] ?? data['id']).toString();
+        if (mounted) {
+          setState(() {
+            final idx = _messages.indexWhere((m) => m.id == messageId);
+            if (idx != -1) {
+              // Usually the server sends the full message with isDeleted: true
+              if (data['id'] != null && data['isDeleted'] == true) {
+                 _messages[idx] = Message.fromJson(data);
+              } else {
+                _messages[idx] = Message(
+                  id: _messages[idx].id,
+                  taskId: _messages[idx].taskId,
+                  type: _messages[idx].type,
+                  content: 'This message was deleted',
+                  senderId: _messages[idx].senderId,
+                  sender: _messages[idx].sender,
+                  createdAt: _messages[idx].createdAt,
+                  isDeleted: true,
+                );
+              }
+            }
+          });
+        }
+      }
+    });
+
   }
+
 
   void _loadMessages() async {
     try {
@@ -127,6 +175,18 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
+    final ss = SocketService();
+
+    if (_editingMessage != null) {
+      ss.editMessage(_task!.id, _editingMessage!.id, text, onAck: (ack) {
+        if (mounted) {
+          setState(() => _editingMessage = null);
+          _messageController.clear();
+        }
+      });
+      return;
+    }
+
     final authProvider = context.read<AuthProvider>();
     final me = authProvider.user;
     if (me == null) return;
@@ -156,7 +216,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
     final replyToId = _replyingTo?.id != null ? int.tryParse(_replyingTo!.id) : null;
     
-    final ss = SocketService();
     ss.sendMessage(_task!.id, text, replyToId: replyToId, onAck: (ack) {
       if (mounted) {
         setState(() {
@@ -170,10 +229,33 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     ss.stopTyping(_task!.id);
   }
 
-  void _sendImage() async {
+  void _deleteMessage(String messageId) {
+    SocketService().deleteMessage(_task!.id, messageId);
+  }
+
+  void _startEdit(Message msg) {
+    setState(() {
+      _editingMessage = msg;
+      _messageController.text = msg.content ?? '';
+    });
+  }
+
+  void _pickImage() async {
     final picker = ImagePicker();
     final image = await picker.pickImage(source: ImageSource.gallery);
     if (image == null) return;
+    setState(() => _pendingImage = File(image.path));
+  }
+
+  void _sendImage() async {
+    if (_pendingImage == null) return;
+
+    final imagePath = _pendingImage!.path;
+    setState(() {
+      _isUploadingDetail = true;
+      // Removed _pendingImage = null so the banner stays during upload
+    });
+
 
     final authProvider = context.read<AuthProvider>();
     final me = authProvider.user;
@@ -184,7 +266,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       id: 'tmp-img-${DateTime.now().millisecondsSinceEpoch}',
       taskId: _task!.id,
       type: 'image',
-      imageUrl: image.path, // Use local path for immediate display
+      imageUrl: imagePath, // Use local path for immediate display
       senderId: me['id'],
       sender: User.fromJson(me),
       replyInfo: _replyingTo != null ? {
@@ -204,25 +286,32 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final tp = context.read<TaskProvider>();
     
     try {
-      final msg = await tp.uploadTaskImage(_task!.id, File(image.path));
+      final msg = await tp.uploadTaskImage(_task!.id, File(imagePath));
       final ss = SocketService();
       ss.sendImage(_task!.id, msg.imageUrl!, replyToId: replyToId, onAck: (ack) {
         if (mounted) {
           setState(() {
             _replyingTo = null;
+            _isUploadingDetail = false;
+            _pendingImage = null; // Clear it here on success
             _messages.removeWhere((m) => m.id == optimistic.id);
+
           });
         }
       });
     } catch (e) {
       if (mounted) {
         setState(() {
+          _isUploadingDetail = false;
+          _pendingImage = null; // Also clear on failure to allow retry
           _messages.removeWhere((m) => m.id == optimistic.id);
+
         });
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to upload image: $e')));
       }
     }
   }
+
 
 
   @override
@@ -430,7 +519,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey)),
                     ),
                   GestureDetector(
-                    onLongPress: () => setState(() => _replyingTo = msg),
+                    onLongPress: msg.isDeleted ? null : () {
+                      _showActionSheetDetail(msg, isMine);
+                    },
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
@@ -494,11 +585,18 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                           : Image.network('${SocketService().baseUrl}${msg.imageUrl}', fit: BoxFit.cover)),
                                 ),
                             ),
-                          if (msg.content != null)
-                            Text(
-                              msg.content!, 
-                              style: const TextStyle(fontSize: 14, height: 1.4),
-                              textAlign: isMine ? TextAlign.right : TextAlign.left,
+                          Text(
+                            msg.isDeleted ? 'This message was deleted' : (msg.content ?? ''), 
+                            style: TextStyle(
+                              color: isDark ? Colors.white : Colors.black87,
+                              fontStyle: msg.isDeleted ? FontStyle.italic : null,
+                              fontSize: msg.isDeleted ? 12 : 14,
+                            )
+                          ),
+                          if (!msg.isDeleted && msg.editedAt != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text('edited', style: TextStyle(fontSize: 8, color: Colors.grey[500])),
                             ),
                           const SizedBox(height: 4),
                           Text(
@@ -510,6 +608,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                       ),
                     ),
                   ),
+
                 ],
               ),
             ),
@@ -525,7 +624,54 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
+  void _showActionSheetDetail(Message msg, bool isMine) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(LucideIcons.reply),
+              title: const Text('Reply'),
+              onTap: () {
+                Navigator.pop(ctx);
+                setState(() => _replyingTo = msg);
+              },
+            ),
+            if (isMine && msg.type == 'text')
+              ListTile(
+                leading: const Icon(LucideIcons.edit2),
+                title: const Text('Edit'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _startEdit(msg);
+                },
+              ),
+            if (isMine)
+              ListTile(
+                leading: const Icon(LucideIcons.trash2, color: Colors.redAccent),
+                title: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _deleteMessage(msg.id);
+                },
+              ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildAvatar(User? sender) {
+
     return Container(
       width: 32,
       height: 32,
@@ -572,16 +718,64 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(LucideIcons.reply, size: 16, color: Colors.grey),
+                  Icon(_replyingTo!.type == 'image' ? LucideIcons.image : LucideIcons.reply, size: 16, color: Colors.grey),
                   const SizedBox(width: 12),
-                  Expanded(child: Text(_replyingTo!.content ?? 'Image attachment', style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  Expanded(child: Text(_replyingTo!.content ?? (_replyingTo!.type == 'image' ? 'Image attachment' : ''), style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis)),
                   IconButton(onPressed: () => setState(() => _replyingTo = null), icon: const Icon(LucideIcons.x, size: 16)),
                 ],
               ),
             ),
+          if (_editingMessage != null)
+            Container(
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: th.colorScheme.primary.withAlpha(10),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: th.colorScheme.primary.withAlpha(30)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.edit2, size: 16, color: Colors.grey),
+                  const SizedBox(width: 12),
+                  const Expanded(child: Text('Editing message', style: TextStyle(fontSize: 12, color: Colors.grey))),
+                  IconButton(onPressed: () => setState(() {
+                    _editingMessage = null;
+                    _messageController.clear();
+                  }), icon: const Icon(LucideIcons.x, size: 16)),
+                ],
+              ),
+            ),
+          if (_pendingImage != null)
+             Container(
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withAlpha(5) : Colors.black.withAlpha(3),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.file(_pendingImage!, width: 40, height: 40, fit: BoxFit.cover),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(child: Text('Image preview', style: TextStyle(fontSize: 12, color: Colors.grey))),
+                  if (_isUploadingDetail)
+                    const CustomLoader(size: 16)
+                  else ...[
+                      IconButton(onPressed: _sendImage, icon: Icon(LucideIcons.send, color: th.colorScheme.primary, size: 18)),
+                      IconButton(onPressed: () => setState(() => _pendingImage = null), icon: const Icon(LucideIcons.x, size: 16)),
+                  ]
+                ],
+              ),
+            ),
+
           Row(
             children: [
-              IconButton(onPressed: _sendImage, icon: const Icon(LucideIcons.plus, color: Colors.grey)),
+              IconButton(onPressed: _pickImage, icon: const Icon(LucideIcons.plus, color: Colors.grey)),
+
               const SizedBox(width: 8),
               Expanded(
                 child: TextField(

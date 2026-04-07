@@ -5,13 +5,17 @@ import '../models/company_model.dart';
 import '../models/report_models.dart';
 import '../models/task_model.dart';
 import '../models/session_model.dart';
+import '../models/project_model.dart';
 import '../services/api_client.dart';
+
 
 class AdminProvider extends ChangeNotifier {
   List<User> _users = [];
   List<Company> _companies = [];
+  List<Project> _projects = [];
   
   ReportOverview? _overview;
+
   List<UserPerformance> _userPerformance = [];
   List<CompanySummary> _companySummary = [];
   List<Task> _progressTasks = [];
@@ -27,7 +31,9 @@ class AdminProvider extends ChangeNotifier {
 
   List<User> get users => _users;
   List<Company> get companies => _companies;
+  List<Project> get projects => _projects;
   ReportOverview? get overview => _overview;
+
   List<UserPerformance> get userPerformance => _userPerformance;
   List<CompanySummary> get companySummary => _companySummary;
   List<Task> get progressTasks => _progressTasks;
@@ -135,6 +141,36 @@ class AdminProvider extends ChangeNotifier {
       final response = await _api.post('/api/companies', body: {'name': name});
       final newCompany = Company.fromJson(response['item']);
       _companies.insert(0, newCompany);
+      notifyListeners();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // Project Management
+  Future<void> fetchProjects() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      final response = await _api.get('/api/projects');
+      final List<dynamic> items = response['items'] ?? [];
+      _projects = items.map((p) => Project.fromJson(p)).toList();
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> createProject(String name) async {
+    try {
+      final response = await _api.post('/api/projects', body: {'name': name});
+      final newProject = Project.fromJson(response['item']);
+      _projects.insert(0, newProject);
       notifyListeners();
     } catch (e) {
       rethrow;

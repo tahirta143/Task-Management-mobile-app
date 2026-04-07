@@ -22,6 +22,8 @@ import 'admin/reports/admin_reports_screen.dart';
 import 'admin/copmanies/admin_companies_screen.dart';
 import 'admin/tasks/admin_tasks_screen.dart';
 import 'admin/admin_tracking/admin_tracking_screen.dart';
+import 'admin/projects/admin_projects_screen.dart';
+
 
 class MainAppScaffold extends StatefulWidget {
   const MainAppScaffold({super.key});
@@ -59,7 +61,13 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
 
     // Join the personal user room so the server can push events directly
     // to this user (task:assigned, task:new_message)
+    final auth = context.read<AuthProvider>();
+    LocalNotificationService().currentUserId = auth.user?['id'];
+    LocalNotificationService().currentUsername = auth.user?['username'];
+
     if (ss.socket.connected) {
+
+
       debugPrint('MainAppScaffold: Joining User Room');
       ss.joinUserRoom();
     } else {
@@ -86,8 +94,19 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
     // ── Chat message notifications ─────────────────────────────────────────
     ss.listenForNewChatMessage((payload) {
       if (!mounted) return;
+      final auth = context.read<AuthProvider>();
       final notif = AppNotification.fromChatMessage(payload);
+      final myUsername = auth.user?['username']?.toString();
+
+      // Filter out notifications for messages sent by self
+      if (notif.senderUsername != null && myUsername != null && 
+          notif.senderUsername!.toLowerCase() == myUsername.toLowerCase()) {
+        return;
+      }
+
       final last = payload['lastMessage'] as Map<String, dynamic>?;
+
+
       final sender = last?['senderUsername'] as String? ?? 'New message';
       final content = last?['type'] == 'image'
           ? '📷 Image'
@@ -730,6 +749,13 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                             onTap: () => _navigateToAdmin(
                                 const AdminTasksScreen(), 'Admin Tasks'),
                           ),
+                          _NavItem(
+                            icon: LucideIcons.folder,
+                            label: 'Projects',
+                            onTap: () => _navigateToAdmin(
+                                const AdminProjectsScreen(), 'Projects Setup'),
+                          ),
+
                           _NavItem(
                             icon: LucideIcons.activity,
                             label: 'Tracking',

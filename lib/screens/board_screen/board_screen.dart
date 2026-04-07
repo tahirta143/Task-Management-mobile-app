@@ -187,6 +187,8 @@ class _BoardScreenState extends State<BoardScreen> {
     _userSearchQuery = '';
 
     context.read<AdminProvider>().fetchUsers();
+    context.read<AdminProvider>().fetchProjects();
+
 
     showGeneralDialog(
       context: context,
@@ -272,20 +274,41 @@ class _BoardScreenState extends State<BoardScreen> {
                             ),
                             const SizedBox(height: 20),
 
-                            _buildLabel('Project name'),
-                            TextField(
-                              controller: _projectNameController,
-                              decoration: InputDecoration(
-                                hintText: 'E.g. Q2 Website Refresh',
-                                fillColor: isDark
-                                    ? Colors.white.withAlpha(10)
-                                    : Colors.black.withAlpha(5),
-                                filled: true,
-                                border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                    borderSide: BorderSide.none),
+                            _buildLabel('Project'),
+                            Consumer<AdminProvider>(
+                              builder: (context, ap, child) {
+                                return DropdownButtonFormField<String>(
+                                  value: _projectNameController.text.isEmpty ? null : _projectNameController.text,
+                                  dropdownColor: th.scaffoldBackgroundColor,
+                                  hint: const Text('Select a project', style: TextStyle(fontSize: 14)),
+                                  decoration: InputDecoration(
+                                    fillColor: isDark ? Colors.white.withAlpha(10) : Colors.black.withAlpha(5),
+                                    filled: true,
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                                  ),
+                                  items: [
+                                    const DropdownMenuItem(value: '', child: Text('None')),
+                                    ...ap.projects.map((p) => DropdownMenuItem(
+                                      value: p.name,
+                                      child: Text(p.name, style: const TextStyle(fontSize: 14)),
+                                    ))
+                                  ],
+                                  onChanged: (val) {
+                                    setModalState(() {
+                                      _projectNameController.text = val ?? '';
+                                    });
+                                  },
+                                );
+                              },
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.only(top: 4, left: 4),
+                              child: Text(
+                                'Add projects from the Projects page in admin setup.',
+                                style: TextStyle(fontSize: 10, color: Colors.grey),
                               ),
                             ),
+
                             const SizedBox(height: 20),
 
                             _buildLabel('Points (checklist items)'),

@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 class AppNotification {
   final String id;
   final int? taskId;
+  final int? senderId;
+  final String? senderUsername;
   final String title;
+
+
   final String body;
   final DateTime createdAt;
   bool read;
@@ -11,11 +15,15 @@ class AppNotification {
   AppNotification({
     required this.id,
     this.taskId,
+    this.senderId,
+    this.senderUsername,
     required this.title,
     required this.body,
     required this.createdAt,
     this.read = false,
   });
+
+
 
   factory AppNotification.fromTaskAssigned(Map<String, dynamic> data) {
     return AppNotification(
@@ -40,14 +48,40 @@ class AppNotification {
     final taskId = data['taskId'] is int
         ? data['taskId'] as int
         : int.tryParse('${data['taskId'] ?? ''}');
+
+    // Recursive helper to find any ID associated with a sender
+    dynamic findSenderId(dynamic json) {
+      if (json is! Map) return null;
+      return json['senderId'] ?? 
+             json['userId'] ?? 
+             json['sender']?['id'] ?? 
+             json['sender_id'] ??
+             json['from_id'] ??
+             json['Id'];
+    }
+
+    final rawSenderId = findSenderId(data) ?? findSenderId(last);
+    final senderId = rawSenderId is int 
+        ? rawSenderId 
+        : int.tryParse('$rawSenderId');
+    
+    final senderUsername = last?['senderUsername']?.toString() ?? 
+                         data['senderUsername']?.toString() ?? 
+                         last?['sender']?['username']?.toString();
+
     return AppNotification(
       id: 'msg-${DateTime.now().millisecondsSinceEpoch}',
       taskId: taskId,
+      senderId: senderId,
+      senderUsername: senderUsername,
       title: 'New Message',
       body: '$sender: $content',
       createdAt: DateTime.now(),
     );
   }
+
+
+
 }
 
 class NotificationProvider extends ChangeNotifier {

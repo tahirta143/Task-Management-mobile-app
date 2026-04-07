@@ -89,6 +89,31 @@ class SocketService {
     });
   }
 
+  void editMessage(int taskId, String messageId, String content,
+      {Function? onAck}) {
+    _socket?.emitWithAck(
+        'message:edit',
+        {
+          'taskId': taskId,
+          'messageId': messageId,
+          'content': content,
+        }, ack: (data) {
+      if (onAck != null) onAck(data);
+    });
+  }
+
+  void deleteMessage(int taskId, String messageId, {Function? onAck}) {
+    _socket?.emitWithAck(
+        'message:delete',
+        {
+          'taskId': taskId,
+          'messageId': messageId,
+        }, ack: (data) {
+      if (onAck != null) onAck(data);
+    });
+  }
+
+
   void sendImage(int taskId, String imageUrl,
       {int? replyToId, Function? onAck}) {
     _socket?.emitWithAck(
