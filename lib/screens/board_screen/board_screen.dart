@@ -885,6 +885,12 @@ class _BoardScreenState extends State<BoardScreen> {
     final isDark = th.brightness == Brightness.dark;
 
     final tp = Provider.of<TaskProvider>(context);
+    final statusMap = {
+      'Pending': 'pending',
+      'In Progress': 'in_progress',
+      'Hold': 'hold',
+      'Completed': 'completed',
+    };
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -986,47 +992,101 @@ class _BoardScreenState extends State<BoardScreen> {
                 child: Row(
                   children: _tabs.map((tab) {
                     final isSelected = _selectedTab == tab;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8.0),
-                      child: InkWell(
-                        onTap: () {
-                          setState(() {
-                            _selectedTab = tab;
-                          });
-                        },
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? th.colorScheme.primary
-                                : (isDark
-                                ? Colors.white.withAlpha(20)
-                                : Colors.black.withAlpha(10)),
+                    final targetStatus = statusMap[tab]!;
+                    
+                    return DragTarget<Task>(
+                      onWillAccept: (task) {
+                        if (task == null) return false;
+                        if (task.status == targetStatus) return false;
+                        
+                        // React logic: 
+                        // 1. Only admins can move to completed
+                        final isAdmin = context.read<AuthProvider>().user?['role'] == 'admin';
+                        if (targetStatus == 'completed' && !isAdmin) return false;
+                        
+                        // 2. Cannot move back from in_progress to pending
+                        if (task.status == 'in_progress' && targetStatus == 'pending') return false;
+                        
+                        return true;
+                      },
+                      onAccept: (task) async {
+                        try {
+                          await context.read<TaskProvider>().updateTask(task.id, {'status': targetStatus});
+                          if (mounted) {
+                            setState(() {
+                              _selectedTab = tab;
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Task moved to $tab'),
+                                backgroundColor: th.colorScheme.primary,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed to move task: $e')),
+                            );
+                          }
+                        }
+                      },
+                      builder: (context, candidateData, rejectedData) {
+                        final isOver = candidateData.isNotEmpty;
+                        
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: InkWell(
+                            onTap: () {
+                              setState(() {
+                                _selectedTab = tab;
+                              });
+                            },
                             borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            tab,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: isSelected
-                                  ? Colors.black
-                                  : (isDark
-                                  ? Colors.white70
-                                  : Colors.black87),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isOver 
+                                    ? th.colorScheme.primary.withAlpha(50)
+                                    : (isSelected
+                                        ? th.colorScheme.primary
+                                        : (isDark
+                                            ? Colors.white.withAlpha(20)
+                                            : Colors.black.withAlpha(10))),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: isOver 
+                                      ? th.colorScheme.primary 
+                                      : Colors.transparent,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Text(
+                                tab,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: isOver || isSelected
+                                      ? (isOver ? th.colorScheme.primary : Colors.black)
+                                      : (isDark
+                                          ? Colors.white70
+                                          : Colors.black87),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     );
                   }).toList(),
                 ),
               ),
               const SizedBox(height: 24),
 
-              _buildTasksForSelectedTab(isDark, th),
+              _buildTasksForSelectedTab(isDark, th, statusMap),
             ],
           ),
         ),
@@ -1034,30 +1094,13 @@ class _BoardScreenState extends State<BoardScreen> {
     );
   }
 
-  Widget _buildTasksForSelectedTab(bool isDark, ThemeData th) {
+  Widget _buildTasksForSelectedTab(bool isDark, ThemeData th, Map<String, String> statusMap) {
     final tp = Provider.of<TaskProvider>(context);
-    final statusMap = {
-      'Pending': 'pending',
-      'In Progress': 'in_progress',
-      'Hold': 'hold',
-      'Completed': 'completed',
-    };
 
     final filteredTasks = tp.tasks.where((t) {
       final status = statusMap[_selectedTab];
-      final isPct100 = t.progressPercent == 100;
       
-      bool matchesStatus = false;
-      if (_selectedTab == 'Completed') {
-        // Show tasks explicitly marked 'completed' OR those with 100% progress
-        matchesStatus = t.status == 'completed' || isPct100;
-      } else if (_selectedTab == 'In Progress') {
-        // Show tasks that are 'in_progress' AND not yet 100%
-        matchesStatus = t.status == 'in_progress' && !isPct100;
-      } else {
-        // For Pending/Hold, just use the status
-        matchesStatus = t.status == status;
-      }
+      bool matchesStatus = t.status == status;
       
       if (!matchesStatus) return false;
 
@@ -1132,218 +1175,273 @@ class _BoardScreenState extends State<BoardScreen> {
         priorityBg = priorityColor.withAlpha(40);
     }
 
-    return GestureDetector(
-      onTap: () {
-        if (task.status == 'completed' || task.progressPercent == 100) {
-          showDialog(
-            context: context,
-            builder: (context) => TaskEvaluationDialog(task: task),
-          ).then((_) => context.read<TaskProvider>().fetchTasks());
-          return;
-        }
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => TaskDetailScreen(task: task),
+    return LongPressDraggable<Task>(
+      data: task,
+      maxSimultaneousDrags: 1,
+      feedback: Material(
+        color: Colors.transparent,
+        child: SizedBox(
+          width: MediaQuery.of(context).size.width * 0.9,
+          child: Opacity(
+            opacity: 0.8,
+            child: _buildTaskCardContent(context, task, isDark, th),
           ),
-        ).then((_) => context.read<TaskProvider>().fetchTasks());
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: isDark ? Colors.white.withAlpha(10) : Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-              color: isDark
-                  ? Colors.white.withAlpha(10)
-                  : Colors.black.withAlpha(5)),
-          boxShadow: isDark
-              ? null
-              : [
-            BoxShadow(
-                color: Colors.black.withAlpha(5),
-                blurRadius: 10,
-                offset: const Offset(0, 4))
-          ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Top Row
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Text('#${task.id}',
-                            style: TextStyle(
-                                fontSize: 10,
-                                fontFamily: 'monospace',
-                                color: Colors.grey.withAlpha(150),
-                                fontWeight: FontWeight.bold)),
-                        const SizedBox(width: 8),
-                        if (task.assignees.isNotEmpty)
-                          Expanded(
-                            child: Text(
-                              task.assignees.map((a) {
-                                if (a.username.isEmpty) return "User";
-                                return a.username[0].toUpperCase() +
-                                    a.username.substring(1);
-                              }).join(', '),
-                              style: const TextStyle(
-                                  fontSize: 10, color: Colors.grey),
-                              overflow: TextOverflow.ellipsis,
-                            ),
+      ),
+      childWhenDragging: Opacity(
+        opacity: 0.3,
+        child: _buildTaskCardContent(context, task, isDark, th),
+      ),
+      child: GestureDetector(
+        onTap: () {
+          if (task.status == 'completed') {
+            showDialog(
+              context: context,
+              builder: (context) => TaskEvaluationDialog(task: task),
+            ).then((_) => context.read<TaskProvider>().fetchTasks());
+            return;
+          }
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => TaskDetailScreen(task: task),
+            ),
+          ).then((_) => context.read<TaskProvider>().fetchTasks());
+        },
+        child: _buildTaskCardContent(context, task, isDark, th),
+      ),
+    );
+  }
+
+  Widget _buildTaskCardContent(BuildContext context, Task task, bool isDark, ThemeData th) {
+    final totalPoints = task.points.length;
+    final donePoints = task.points.where((p) => p.isDone).length;
+    final progressPct = totalPoints > 0 ? (donePoints / totalPoints) : 0.0;
+
+    int? daysLeft;
+    if (task.dueDate != null) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final due = DateTime(
+          task.dueDate!.year, task.dueDate!.month, task.dueDate!.day);
+      daysLeft = due.difference(today).inDays;
+    }
+
+    Color priorityColor;
+    Color priorityBg;
+    switch (task.priority.toLowerCase()) {
+      case 'urgent':
+        priorityColor = const Color(0xFFF87171);
+        priorityBg = priorityColor.withAlpha(40);
+        break;
+      case 'high':
+        priorityColor = const Color(0xFFFB923C);
+        priorityBg = priorityColor.withAlpha(40);
+        break;
+      case 'medium':
+        priorityColor = const Color(0xFF818CF8);
+        priorityBg = priorityColor.withAlpha(40);
+        break;
+      default:
+        priorityColor = const Color(0xFF6EE7B7);
+        priorityBg = priorityColor.withAlpha(40);
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withAlpha(10) : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+            color: isDark
+                ? Colors.white.withAlpha(10)
+                : Colors.black.withAlpha(5)),
+        boxShadow: isDark
+            ? null
+            : [
+          BoxShadow(
+              color: Colors.black.withAlpha(5),
+              blurRadius: 10,
+              offset: const Offset(0, 4))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top Row
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Text('#${task.id}',
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontFamily: 'monospace',
+                              color: Colors.grey.withAlpha(150),
+                              fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 8),
+                      if (task.assignees.isNotEmpty)
+                        Expanded(
+                          child: Text(
+                            task.assignees.map((a) {
+                              if (a.username.isEmpty) return "User";
+                              return a.username[0].toUpperCase() +
+                                  a.username.substring(1);
+                            }).join(', '),
+                            style: const TextStyle(
+                                fontSize: 10, color: Colors.grey),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                      ],
+                        ),
+                    ],
+                  ),
+                ),
+                Row(
+                  children: [
+                    if (task.unreadCount > 0)
+                      Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(10)),
+                        child: Text(task.unreadCount.toString(),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: priorityBg,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: priorityColor.withAlpha(80)),
+                      ),
+                      child: Text(
+                        task.priority.toUpperCase(),
+                        style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: priorityColor),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(LucideIcons.gripVertical,
+                        size: 14, color: Colors.grey),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Title
+          Padding(
+            padding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  task.title,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      letterSpacing: -0.2),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (task.projectName != null && task.projectName!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0EA5E9).withAlpha(30),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: const Color(0xFF0EA5E9).withAlpha(50)),
+                      ),
+                      child: Text(
+                        task.projectName!,
+                        style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF7DD3FC)),
+                      ),
                     ),
                   ),
-                  Row(
-                    children: [
-                      if (task.unreadCount > 0)
-                        Container(
-                          margin: const EdgeInsets.only(right: 8),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(10)),
-                          child: Text(task.unreadCount.toString(),
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.bold)),
-                        ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: priorityBg,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: priorityColor.withAlpha(80)),
-                        ),
-                        child: Text(
-                          task.priority.toUpperCase(),
-                          style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              color: priorityColor),
-                        ),
+              ],
+            ),
+          ),
+
+          // Progress Bar
+          if (totalPoints > 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 4),
+              child: Column(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: progressPct,
+                      backgroundColor: isDark
+                          ? Colors.white.withAlpha(10)
+                          : Colors.black.withAlpha(10),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        progressPct == 1.0
+                            ? Colors.green
+                            : (daysLeft != null && daysLeft! < 0
+                            ? Colors.red
+                            : (daysLeft != null && daysLeft! <= 3
+                            ? Colors.orange
+                            : th.colorScheme.primary)),
                       ),
-                      const SizedBox(width: 8),
-                      const Icon(LucideIcons.gripVertical,
-                          size: 14, color: Colors.grey),
+                      minHeight: 4,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('$donePoints/$totalPoints',
+                          style: const TextStyle(
+                              fontSize: 9,
+                              fontFamily: 'monospace',
+                              color: Colors.grey)),
+                      Text('${(progressPct * 100).round()}%',
+                          style: const TextStyle(
+                              fontSize: 9,
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey)),
                     ],
                   ),
                 ],
               ),
             ),
 
-            // Title
+          // Days Remaining
+          if (daysLeft != null)
             Padding(
-              padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Text(
-                    task.title,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        letterSpacing: -0.2),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (task.projectName != null && task.projectName!.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0EA5E9).withAlpha(30),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                              color: const Color(0xFF0EA5E9).withAlpha(50)),
-                        ),
-                        child: Text(
-                          task.projectName!,
-                          style: const TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF7DD3FC)),
-                        ),
-                      ),
-                    ),
+                  _buildDaysChip(daysLeft!),
                 ],
               ),
             ),
-
-            // Progress Bar
-            if (totalPoints > 0)
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 4),
-                child: Column(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: progressPct,
-                        backgroundColor: isDark
-                            ? Colors.white.withAlpha(10)
-                            : Colors.black.withAlpha(10),
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          progressPct == 1.0
-                              ? Colors.green
-                              : (daysLeft != null && daysLeft! < 0
-                              ? Colors.red
-                              : (daysLeft != null && daysLeft! <= 3
-                              ? Colors.orange
-                              : th.colorScheme.primary)),
-                        ),
-                        minHeight: 4,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('$donePoints/$totalPoints',
-                            style: const TextStyle(
-                                fontSize: 9,
-                                fontFamily: 'monospace',
-                                color: Colors.grey)),
-                        Text('${(progressPct * 100).round()}%',
-                            style: const TextStyle(
-                                fontSize: 9,
-                                fontFamily: 'monospace',
-                                fontWeight: FontWeight.bold,
-                                color: Colors.grey)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-            // Days Remaining
-            if (daysLeft != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    _buildDaysChip(daysLeft!),
-                  ],
-                ),
-              ),
-          ],
-        ),
+        ],
       ),
     );
   }
